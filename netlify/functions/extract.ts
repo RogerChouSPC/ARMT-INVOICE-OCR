@@ -1,7 +1,8 @@
 import type { Handler } from '@netlify/functions'
 import { getStore } from '@netlify/blobs'
 
-const GEMINI_MODEL = 'gemini-2.5-flash'
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
+const MODEL = 'google/gemini-2.5-flash'
 const OUR_TAXID = '0107537001421'
 
 function buildSystemPrompt(customerMasterJson: string): string {
@@ -80,14 +81,20 @@ const FALLBACK_CUSTOMER_MASTER = [
   { store_name: 'เซ็นทรัล', customergroup: '11 - เซ็นทรัล', customercode: '0109266 เซ็นทรัลพัฒนา จำกัด (มหาชน)', taxid: '0107536000633' },
 ]
 
+function parseJsonFromText(text: string): object[] {
+  const stripped = text.trim().replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '')
+  const parsed = JSON.parse(stripped)
+  return Array.isArray(parsed) ? parsed : [parsed]
+}
+
 const handler: Handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method Not Allowed' }
   }
 
-  const apiKey = process.env.GEMINI_API_KEY
+  const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) {
-    return { statusCode: 500, body: JSON.stringify({ error: 'GEMINI_API_KEY not configured' }) }
+    return { statusCode: 500, body: JSON.stringify({ error: 'OPENROUTER_API_KEY not configured' }) }
   }
 
   let text: string
@@ -111,7 +118,7 @@ const handler: Handler = async (event) => {
       const rows = (state.rows || []).map(({ store_name, customergroup, customercode, taxid }: {
         store_name: string; customergroup: string; customercode: string; taxid: string
       }) => ({ store_name, customergroup, customercode, taxid }))
-      customerMasterJson = JSON.stringify(rows, null, 0)
+      customerMasterJson = JSON.stringify(rows)
     } else {
       customerMasterJson = JSON.stringify(FALLBACK_CUSTOMER_MASTER)
     }
@@ -122,46 +129,39 @@ const handler: Handler = async (event) => {
   const truncated = text.length > 12000 ? text.slice(0, 12000) + '\n[truncated]' : text
 
   try {
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: buildSystemPrompt(customerMasterJson) }] },
-          contents: [{
-            role: 'user',
-            parts: [{ text: `Filename: ${filename}\n\nInvoice text:\n\n${truncated}` }],
-          }],
-          generationConfig: {
-            temperature: 0.1,
-            responseMimeType: 'application/json',
-            thinkingConfig: { thinkingBudget: 0 },
-          },
-        }),
-      }
-    )
+    const res = await fetch(OPENROUTER_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        messages: [
+          { role: 'system', content: buildSystemPrompt(customerMasterJson) },
+          { role: 'user', content: `Filename: ${filename}\n\nInvoice text:\n\n${truncated}` },
+        ],
+        temperature: 0.1,
+      }),
+    })
 
-    if (!geminiRes.ok) {
-      const errText = await geminiRes.text()
-      if (geminiRes.status === 429) {
+    if (!res.ok) {
+      const errText = await res.text()
+      if (res.status === 429) {
         return {
           statusCode: 429,
-          body: JSON.stringify({
-            error: 'Gemini API quota exceeded. Please wait a minute and try again, or enable billing at console.cloud.google.com to remove free-tier limits.',
-          }),
+          body: JSON.stringify({ error: 'API quota exceeded. Please try again shortly.' }),
         }
       }
-      return { statusCode: 502, body: JSON.stringify({ error: `Gemini ${geminiRes.status}: ${errText.slice(0, 300)}` }) }
+      return { statusCode: 502, body: JSON.stringify({ error: `OpenRouter ${res.status}: ${errText.slice(0, 300)}` }) }
     }
 
-    const data = await geminiRes.json()
-    const raw: string = data?.candidates?.[0]?.content?.parts?.[0]?.text || '[]'
+    const data = await res.json()
+    const raw: string = data?.choices?.[0]?.message?.content || '[]'
 
     let rows: object[]
     try {
-      const parsed = JSON.parse(raw)
-      rows = Array.isArray(parsed) ? parsed : [parsed]
+      rows = parseJsonFromText(raw)
     } catch {
       rows = []
     }
