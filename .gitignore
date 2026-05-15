@@ -4,6 +4,7 @@
 # Build output
 node_modules/
 dist/
+*.tsbuildinfo
 
 # Secrets
 .env
@@ -16,3 +17,7 @@ dist/
 ARMT-INVOICE-OCR/venv/
 ARMT-INVOICE-OCR/__pycache__/
 ARMT-INVOICE-OCR/data/customer_master.db
+
+# Sub-projects with their own git repos (not tracked here)
+vercel/
+localhost/
