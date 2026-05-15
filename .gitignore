@@ -18,6 +18,9 @@ ARMT-INVOICE-OCR/venv/
 ARMT-INVOICE-OCR/__pycache__/
 ARMT-INVOICE-OCR/data/customer_master.db
 
-# Sub-projects with their own git repos (not tracked here)
-vercel/
-localhost/
+# Build artifacts in sub-projects
+vercel/node_modules/
+vercel/dist/
+vercel/.vercel/
+vercel/vercel/
+localhost/node_modules/

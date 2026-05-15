@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Google Sans', Roboto, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    @apply bg-gray-50 text-gray-900;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-6 py-2.5 bg-google-blue text-white rounded-full text-sm font-medium
+           shadow-button transition-all duration-150
+           hover:bg-google-blue-dark hover:shadow-md
+           active:scale-95
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-google-blue;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center gap-2 px-6 py-2.5 bg-white text-google-blue border border-gray-300 rounded-full text-sm font-medium
+           transition-all duration-150
+           hover:bg-google-blue-light hover:border-google-blue
+           active:scale-95
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .card {
+    @apply bg-white rounded-2xl shadow-card;
+  }
+
+  .input-cell {
+    @apply w-full bg-transparent border-none outline-none text-sm py-1 px-1
+           focus:bg-google-blue-light focus:rounded
+           placeholder:text-gray-400;
+  }
+
+  .progress-bar {
+    @apply h-1 bg-google-blue rounded-full transition-all duration-300;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { @apply bg-gray-100 rounded; }
+::-webkit-scrollbar-thumb { @apply bg-gray-300 rounded hover:bg-gray-400; }
+
+/* Table sticky header */
+.table-container {
+  max-height: 60vh;
+  overflow: auto;
+}
+
+.table-container thead th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: #e8f0fe;
+}
