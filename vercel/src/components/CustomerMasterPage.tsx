@@ -187,7 +187,8 @@ export default function CustomerMasterPage() {
         deleted:  changes.filter(c => c.type === 'delete').length,
         modified: changes.filter(c => c.type === 'edit').length,
         changes,
-        snapshot: finalRows,
+        // snapshot = state BEFORE this save so Restore undoes it
+        snapshot: prevRows.length > 0 ? prevRows : finalRows,
       }
       const newHistory = [version, ...history].slice(0, 50)
       localStorage.setItem(LS_ROWS, JSON.stringify(finalRows))
@@ -278,7 +279,8 @@ export default function CustomerMasterPage() {
         deleted:  changes.filter(c => c.type === 'delete').length,
         modified: changes.filter(c => c.type === 'edit').length,
         changes,
-        snapshot: imported,
+        // snapshot = state BEFORE import so Restore undoes the import
+        snapshot: prevRows.length > 0 ? prevRows : imported,
       }
       const newHistory = [version, ...lsGetHistory()].slice(0, 50)
       localStorage.setItem(LS_ROWS, JSON.stringify(imported))
@@ -474,9 +476,10 @@ export default function CustomerMasterPage() {
                       <button
                         onClick={e => { e.stopPropagation(); restore(v.id) }}
                         disabled={!v.snapshot || v.snapshot.length === 0}
+                        title={v.snapshot?.length > 0 ? `Undo this save → restore ${v.snapshot.length} rows` : 'No snapshot available'}
                         className="shrink-0 text-[11px] text-google-blue hover:underline disabled:text-gray-300 disabled:cursor-not-allowed"
                       >
-                        Restore
+                        Undo
                       </button>
                     </div>
                     {expandedVersion === v.id && v.changes.length > 0 && (
