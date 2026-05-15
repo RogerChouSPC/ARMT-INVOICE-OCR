@@ -1,8 +1,32 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import * as XLSX from 'xlsx'
-import type { CustomerRow, Version } from '../../netlify/functions/customer-master'
+import type { CustomerRow } from '../../netlify/functions/customer-master'
 
-// ── Seed data (initial load if server has nothing) ───────────────────────────
+// ── Local types (mirror server types, no runtime dep on function) ─────────────
+type ChangeType = 'add' | 'delete' | 'edit'
+interface Change {
+  type: ChangeType
+  row?: CustomerRow
+  key?: string
+  before?: Partial<CustomerRow>
+  after?: Partial<CustomerRow>
+}
+export interface Version {
+  id: string
+  timestamp: string
+  label: string
+  added: number
+  deleted: number
+  modified: number
+  changes: Change[]
+  snapshot: CustomerRow[]
+}
+
+// ── localStorage keys ─────────────────────────────────────────────────────────
+const LS_ROWS    = 'armt_cm_rows'
+const LS_HISTORY = 'armt_cm_history'
+
+// ── Seed data ─────────────────────────────────────────────────────────────────
 const SEED: Omit<CustomerRow, 'id'>[] = [
   { store_name: 'ซีพี แอ็กซ์ตร้า', customergroup: '04 - ซีพี แอ็กซ์ตร้า(Makro)', customercode: '0118808 - บริษัท ซีพี แอ็กซ์ตร้า จำกัด (มหาชน) สำนักงานใหญ่', taxid: '0107567000414' },
   { store_name: 'ซีพี แอ็กซ์ตร้า', customergroup: '05 - โลตัส', customercode: '0118866 - บริษัท ซีพี แอ็กซ์ตร้า จำกัด (มหาชน) สำนักงานใหญ่', taxid: '0107567000414' },
@@ -52,6 +76,41 @@ function seedWithIds(): CustomerRow[] {
   return SEED.map((r, i) => ({ ...r, id: `seed-${i}` }))
 }
 
+function diff(before: CustomerRow[], after: CustomerRow[]): Change[] {
+  const changes: Change[] = []
+  const bMap = new Map(before.map(r => [r.id, r]))
+  const aMap = new Map(after.map(r => [r.id, r]))
+  for (const [id, r] of bMap) {
+    if (!aMap.has(id)) {
+      changes.push({ type: 'delete', row: r })
+    } else {
+      const a = aMap.get(id)!
+      const bFields: Partial<CustomerRow> = {}
+      const aFields: Partial<CustomerRow> = {}
+      for (const f of ['store_name', 'customergroup', 'customercode', 'taxid'] as const) {
+        if (r[f] !== a[f]) { bFields[f] = r[f]; aFields[f] = a[f] }
+      }
+      if (Object.keys(aFields).length) changes.push({ type: 'edit', key: id, before: bFields, after: aFields })
+    }
+  }
+  for (const [id, r] of aMap) {
+    if (!bMap.has(id)) changes.push({ type: 'add', row: r })
+  }
+  return changes
+}
+
+function lsGetRows(): CustomerRow[] | null {
+  try { return JSON.parse(localStorage.getItem(LS_ROWS) || 'null') } catch { return null }
+}
+function lsGetHistory(): Version[] {
+  try { return JSON.parse(localStorage.getItem(LS_HISTORY) || '[]') } catch { return [] }
+}
+
+// ── Exported helper so App.tsx can pass CM to extract ────────────────────────
+export function getCustomerMasterRows(): CustomerRow[] {
+  return lsGetRows() || seedWithIds()
+}
+
 const COLS: { key: keyof CustomerRow; label: string; width: number }[] = [
   { key: 'store_name',    label: 'ชื่อร้านค้า',      width: 220 },
   { key: 'customergroup', label: 'customergroup',     width: 260 },
@@ -60,8 +119,7 @@ const COLS: { key: keyof CustomerRow; label: string; width: number }[] = [
 ]
 
 function fmtDate(iso: string) {
-  const d = new Date(iso)
-  return d.toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })
+  return new Date(iso).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -78,21 +136,17 @@ export default function CustomerMasterPage() {
   const [toast, setToast]       = useState<{ msg: string; ok: boolean } | null>(null)
   const importRef = useRef<HTMLInputElement>(null)
 
-  // ── load ──────────────────────────────────────────────────────────────────
+  // ── load from localStorage ────────────────────────────────────────────────
   useEffect(() => {
-    fetch('/.netlify/functions/customer-master')
-      .then(r => r.json())
-      .then(data => {
-        if (data.rows?.length) {
-          setRows(data.rows)
-        } else {
-          setRows(seedWithIds())
-          setDirty(true) // seed data not on server yet — enable Save
-        }
-        setHistory(data.history || [])
-      })
-      .catch(() => { setRows(seedWithIds()); setDirty(true) })
-      .finally(() => setLoading(false))
+    const saved = lsGetRows()
+    if (saved) {
+      setRows(saved)
+    } else {
+      setRows(seedWithIds())
+      setDirty(true) // seed data not saved yet
+    }
+    setHistory(lsGetHistory())
+    setLoading(false)
   }, [])
 
   const showToast = (msg: string, ok = true) => {
@@ -100,9 +154,8 @@ export default function CustomerMasterPage() {
     setTimeout(() => setToast(null), 3000)
   }
 
-  // ── save ──────────────────────────────────────────────────────────────────
-  const save = useCallback(async () => {
-    // Commit any in-progress cell edit before saving
+  // ── save to localStorage ──────────────────────────────────────────────────
+  const save = useCallback(() => {
     const finalRows = editCell
       ? rows.map((r, i) => i === editCell.row ? { ...r, [editCell.col]: editValue } : r)
       : rows
@@ -110,49 +163,58 @@ export default function CustomerMasterPage() {
 
     setSaving(true)
     try {
-      const res = await fetch('/.netlify/functions/customer-master', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rows: finalRows, label: 'Web edit' }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Save failed')
+      const prevRows = lsGetRows() || []
+      const changes = diff(prevRows, finalRows)
+      const version: Version = {
+        id: Date.now().toString(),
+        timestamp: new Date().toISOString(),
+        label: 'Web edit',
+        added:    changes.filter(c => c.type === 'add').length,
+        deleted:  changes.filter(c => c.type === 'delete').length,
+        modified: changes.filter(c => c.type === 'edit').length,
+        changes,
+        snapshot: prevRows,
+      }
+      const newHistory = [version, ...history].slice(0, 50)
+      localStorage.setItem(LS_ROWS, JSON.stringify(finalRows))
+      localStorage.setItem(LS_HISTORY, JSON.stringify(newHistory))
       setRows(finalRows)
-      // Reload history
-      const state = await fetch('/.netlify/functions/customer-master').then(r => r.json())
-      setHistory(state.history || [])
+      setHistory(newHistory)
       setDirty(false)
       showToast('Saved successfully')
     } catch (e) {
-      showToast((e as Error).message, false)
+      showToast((e as Error).message || 'Save failed', false)
     } finally {
       setSaving(false)
     }
-  }, [rows, editCell, editValue])
+  }, [rows, editCell, editValue, history])
 
-  // ── restore ───────────────────────────────────────────────────────────────
-  const restore = useCallback(async (id: string) => {
-    if (!confirm('Restore this version? Current changes will be saved as a new version.')) return
-    setSaving(true)
-    try {
-      const res = await fetch('/.netlify/functions/customer-master', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Restore failed')
-      setRows(data.rows)
-      const state = await fetch('/.netlify/functions/customer-master').then(r => r.json())
-      setHistory(state.history || [])
-      setDirty(false)
-      showToast('Restored to previous version')
-    } catch (e) {
-      showToast((e as Error).message, false)
-    } finally {
-      setSaving(false)
+  // ── restore from version ──────────────────────────────────────────────────
+  const restore = useCallback((id: string) => {
+    if (!confirm('Restore this version? Current data will be saved as a new version first.')) return
+    const version = history.find(v => v.id === id)
+    if (!version) return
+
+    const currentRows = lsGetRows() || rows
+    const changes = diff(currentRows, version.snapshot)
+    const saveVersion: Version = {
+      id: Date.now().toString(),
+      timestamp: new Date().toISOString(),
+      label: `Restored to ${new Date(Number(id)).toLocaleString()}`,
+      added:    changes.filter(c => c.type === 'add').length,
+      deleted:  changes.filter(c => c.type === 'delete').length,
+      modified: changes.filter(c => c.type === 'edit').length,
+      changes,
+      snapshot: currentRows,
     }
-  }, [])
+    const newHistory = [saveVersion, ...history].slice(0, 50)
+    localStorage.setItem(LS_ROWS, JSON.stringify(version.snapshot))
+    localStorage.setItem(LS_HISTORY, JSON.stringify(newHistory))
+    setRows(version.snapshot)
+    setHistory(newHistory)
+    setDirty(false)
+    showToast('Restored to previous version')
+  }, [history, rows])
 
   // ── cell edit ─────────────────────────────────────────────────────────────
   const startEdit = (rowIdx: number, col: keyof CustomerRow) => {
@@ -171,16 +233,9 @@ export default function CustomerMasterPage() {
   }
 
   const addRow = () => {
-    const newRow: CustomerRow = {
-      id: `new-${Date.now()}`,
-      store_name: '',
-      customergroup: '',
-      customercode: '',
-      taxid: '',
-    }
+    const newRow: CustomerRow = { id: `new-${Date.now()}`, store_name: '', customergroup: '', customercode: '', taxid: '' }
     setRows(prev => [...prev, newRow])
     setDirty(true)
-    // auto-focus first cell of new row
     setTimeout(() => startEdit(rows.length, 'store_name'), 0)
   }
 
@@ -216,12 +271,7 @@ export default function CustomerMasterPage() {
 
   // ── export Excel ──────────────────────────────────────────────────────────
   const exportExcel = () => {
-    const data = rows.map(r => ({
-      'ชื่อร้านค้า': r.store_name,
-      customergroup: r.customergroup,
-      customercode:  r.customercode,
-      taxid:         r.taxid,
-    }))
+    const data = rows.map(r => ({ 'ชื่อร้านค้า': r.store_name, customergroup: r.customergroup, customercode: r.customercode, taxid: r.taxid }))
     const ws = XLSX.utils.json_to_sheet(data)
     ws['!cols'] = [{ wch: 35 }, { wch: 40 }, { wch: 70 }, { wch: 16 }]
     const wb = XLSX.utils.book_new()
@@ -252,35 +302,22 @@ export default function CustomerMasterPage() {
         </span>
 
         <label className="btn-secondary cursor-pointer text-xs">
-          <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current">
-            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
-          </svg>
+          <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" /></svg>
           Import Excel
           <input ref={importRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={importExcel} />
         </label>
 
         <button className="btn-secondary text-xs" onClick={exportExcel}>
-          <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current">
-            <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
-          </svg>
+          <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" /></svg>
           Export Excel
         </button>
 
-        <button
-          className="btn-secondary text-xs"
-          onClick={() => setShowHistory(v => !v)}
-        >
-          <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current">
-            <path d="M13 3a9 9 0 1 0 9 9h-2a7 7 0 1 1-7-7v4l5-5-5-5v4z" />
-          </svg>
+        <button className="btn-secondary text-xs" onClick={() => setShowHistory(v => !v)}>
+          <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current"><path d="M13 3a9 9 0 1 0 9 9h-2a7 7 0 1 1-7-7v4l5-5-5-5v4z" /></svg>
           History {history.length > 0 && <span className="ml-1 bg-google-blue text-white rounded-full px-1.5 py-0 text-[10px]">{history.length}</span>}
         </button>
 
-        <button
-          className="btn-primary text-xs"
-          onClick={save}
-          disabled={saving || !dirty}
-        >
+        <button className="btn-primary text-xs" onClick={save} disabled={saving || !dirty}>
           {saving
             ? <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current animate-spin-slow"><path d="M12 4V2C6.48 2 2 6.48 2 12h2c0-4.42 3.58-8 8-8z" /></svg>
             : <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current"><path d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z" /></svg>
@@ -350,9 +387,7 @@ export default function CustomerMasterPage() {
                         className="w-5 h-5 rounded text-gray-300 hover:text-google-red hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100 flex items-center justify-center"
                         title="Delete row"
                       >
-                        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current">
-                          <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-                        </svg>
+                        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" /></svg>
                       </button>
                     </td>
                   </tr>
@@ -360,16 +395,9 @@ export default function CustomerMasterPage() {
               </tbody>
             </table>
           </div>
-
-          {/* Add row */}
           <div className="px-4 py-2.5 border-t border-gray-100">
-            <button
-              className="flex items-center gap-1.5 text-xs text-google-blue hover:text-google-blue-dark transition-colors"
-              onClick={addRow}
-            >
-              <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current">
-                <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
-              </svg>
+            <button className="flex items-center gap-1.5 text-xs text-google-blue hover:text-google-blue-dark transition-colors" onClick={addRow}>
+              <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" /></svg>
               Add row
             </button>
           </div>
@@ -381,12 +409,9 @@ export default function CustomerMasterPage() {
             <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
               <span className="text-sm font-medium text-gray-700">Version History</span>
               <button onClick={() => setShowHistory(false)} className="text-gray-400 hover:text-gray-600">
-                <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
-                  <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-                </svg>
+                <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" /></svg>
               </button>
             </div>
-
             {history.length === 0 ? (
               <p className="px-4 py-6 text-xs text-gray-400 text-center">No saved versions yet</p>
             ) : (
@@ -411,13 +436,10 @@ export default function CustomerMasterPage() {
                       <button
                         onClick={e => { e.stopPropagation(); restore(v.id) }}
                         className="shrink-0 text-[11px] text-google-blue hover:underline"
-                        title="Restore this version"
                       >
                         Restore
                       </button>
                     </div>
-
-                    {/* Expanded diff */}
                     {expandedVersion === v.id && v.changes.length > 0 && (
                       <div className="px-4 pb-3 space-y-1">
                         {v.changes.map((c, ci) => (
@@ -426,15 +448,9 @@ export default function CustomerMasterPage() {
                             c.type === 'delete' ? 'bg-red-50 text-red-700' :
                             'bg-yellow-50 text-yellow-700'
                           }`}>
-                            {c.type === 'add' && c.row && (
-                              <span><b>+</b> {c.row.store_name || c.row.customercode}</span>
-                            )}
-                            {c.type === 'delete' && c.row && (
-                              <span><b>−</b> {c.row.store_name || c.row.customercode}</span>
-                            )}
-                            {c.type === 'edit' && c.after && (
-                              <span><b>~</b> {Object.entries(c.after).map(([k, v]) => `${k}: "${v}"`).join(', ')}</span>
-                            )}
+                            {c.type === 'add'    && c.row && <span><b>+</b> {c.row.store_name || c.row.customercode}</span>}
+                            {c.type === 'delete' && c.row && <span><b>−</b> {c.row.store_name || c.row.customercode}</span>}
+                            {c.type === 'edit'   && c.after && <span><b>~</b> {Object.entries(c.after).map(([k, v]) => `${k}: "${v}"`).join(', ')}</span>}
                           </div>
                         ))}
                       </div>

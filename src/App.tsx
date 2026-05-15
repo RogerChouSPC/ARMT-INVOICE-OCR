@@ -3,7 +3,7 @@ import Header from '@/components/Header'
 import UploadZone from '@/components/UploadZone'
 import ProcessingStatus from '@/components/ProcessingStatus'
 import ResultsTable from '@/components/ResultsTable'
-import CustomerMasterPage from '@/components/CustomerMasterPage'
+import CustomerMasterPage, { getCustomerMasterRows } from '@/components/CustomerMasterPage'
 import { extractPdfText } from '@/utils/pdfTextExtractor'
 import { renderPdfPages } from '@/utils/pdfRenderer'
 import { exportToExcel } from '@/utils/excelExporter'
@@ -29,6 +29,7 @@ export default function App() {
     setIsProcessing(true)
     setStatuses(files.map((file) => ({ file, state: 'idle', progress: 0, rows: [] })))
     const newRows: InvoiceRow[] = []
+    const customerMaster = getCustomerMasterRows()
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
@@ -45,7 +46,7 @@ export default function App() {
           const res = await fetch('/.netlify/functions/extract', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: pdfText, filename: file.name }),
+            body: JSON.stringify({ text: pdfText, filename: file.name, customerMaster }),
           })
           if (!res.ok) {
             const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
@@ -83,6 +84,7 @@ export default function App() {
             body: JSON.stringify({
               text: ocrTexts.join('\n\n--- PAGE BREAK ---\n\n'),
               filename: file.name,
+              customerMaster,
             }),
           })
           if (!extractRes.ok) {

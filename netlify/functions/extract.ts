@@ -1,5 +1,4 @@
 import type { Handler } from '@netlify/functions'
-import { getStore } from '@netlify/blobs'
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 const MODEL = 'google/gemini-2.5-flash'
@@ -99,31 +98,21 @@ const handler: Handler = async (event) => {
 
   let text: string
   let filename: string
+  let customerMasterJson: string
   try {
     const body = JSON.parse(event.body || '{}')
     text = (body.text || '').trim()
     filename = body.filename || ''
     if (!text) throw new Error('empty text')
+    // Customer Master sent from frontend (localStorage); fall back to hardcoded seeds
+    const cm = body.customerMaster
+    customerMasterJson = (Array.isArray(cm) && cm.length > 0)
+      ? JSON.stringify(cm.map(({ store_name, customergroup, customercode, taxid }: {
+          store_name: string; customergroup: string; customercode: string; taxid: string
+        }) => ({ store_name, customergroup, customercode, taxid })))
+      : JSON.stringify(FALLBACK_CUSTOMER_MASTER)
   } catch {
-    return { statusCode: 400, body: JSON.stringify({ error: 'Expected { text: string, filename?: string }' }) }
-  }
-
-  // Load Customer Master from Blobs for accurate lookup; fall back to seed rows
-  let customerMasterJson: string
-  try {
-    const store = getStore('customer-master')
-    const raw = await store.get('state', { type: 'text' })
-    if (raw) {
-      const state = JSON.parse(raw)
-      const rows = (state.rows || []).map(({ store_name, customergroup, customercode, taxid }: {
-        store_name: string; customergroup: string; customercode: string; taxid: string
-      }) => ({ store_name, customergroup, customercode, taxid }))
-      customerMasterJson = JSON.stringify(rows)
-    } else {
-      customerMasterJson = JSON.stringify(FALLBACK_CUSTOMER_MASTER)
-    }
-  } catch {
-    customerMasterJson = JSON.stringify(FALLBACK_CUSTOMER_MASTER)
+    return { statusCode: 400, body: JSON.stringify({ error: 'Expected { text: string, filename?: string, customerMaster?: array }' }) }
   }
 
   const truncated = text.length > 12000 ? text.slice(0, 12000) + '\n[truncated]' : text
