@@ -1,0 +1,18 @@
+# Local Netlify folder
+.netlify
+
+# Build output
+node_modules/
+dist/
+
+# Secrets
+.env
+.env.local
+
+# Logs
+*.log
+
+# Old Python app
+ARMT-INVOICE-OCR/venv/
+ARMT-INVOICE-OCR/__pycache__/
+ARMT-INVOICE-OCR/data/customer_master.db
