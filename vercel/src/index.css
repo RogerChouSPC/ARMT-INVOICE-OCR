@@ -1,41 +1,56 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400;1,500&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   html {
-    font-family: 'Google Sans', Roboto, Arial, sans-serif;
+    font-family: 'IBM Plex Mono', monospace;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   body {
-    @apply bg-gray-50 text-gray-900;
+    background-color: #0C0B09;
+    color: #E8E2D9;
+    min-height: 100vh;
   }
 
-  * {
-    box-sizing: border-box;
-  }
+  * { box-sizing: border-box; }
 }
 
 @layer components {
+  /* ── Buttons ── */
   .btn-primary {
-    @apply inline-flex items-center gap-2 px-6 py-2.5 bg-google-blue text-white rounded-full text-sm font-medium
-           shadow-button transition-all duration-150
-           hover:bg-google-blue-dark hover:shadow-md
-           active:scale-95
-           disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-google-blue;
+    @apply inline-flex items-center gap-2 px-6 py-2.5 rounded-sm text-sm font-mono
+           transition-all duration-200 tracking-widest uppercase
+           bg-gold text-ink
+           hover:bg-gold-light
+           active:scale-[0.98]
+           disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-gold;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center gap-2 px-6 py-2.5 bg-white text-google-blue border border-gray-300 rounded-full text-sm font-medium
-           transition-all duration-150
-           hover:bg-google-blue-light hover:border-google-blue
-           active:scale-95
-           disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center gap-2 px-6 py-2.5 rounded-sm text-sm font-mono
+           transition-all duration-200 tracking-widest uppercase
+           bg-transparent text-cream border border-border
+           hover:border-gold hover:text-gold
+           active:scale-[0.98]
+           disabled:opacity-30 disabled:cursor-not-allowed;
   }
 
+  /* White card — keep for ResultsTable / CustomerMasterPage */
   .card {
     @apply bg-white rounded-2xl shadow-card;
+  }
+
+  /* Dark atelier card */
+  .card-dark {
+    background: #141310;
+    border: 1px solid #2A2824;
+    border-radius: 4px;
+    box-shadow: 0 0 0 1px rgba(201,168,76,0.06), 0 4px 32px rgba(0,0,0,0.5);
   }
 
   .input-cell {
@@ -45,24 +60,46 @@
   }
 
   .progress-bar {
-    @apply h-1 bg-google-blue rounded-full transition-all duration-300;
+    @apply h-px rounded-full transition-all duration-500;
+    background: #C9A84C;
+  }
+
+  /* Gold hairline divider */
+  .gold-line {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #C9A84C, transparent);
+    opacity: 0.35;
   }
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-track { @apply bg-gray-100 rounded; }
-::-webkit-scrollbar-thumb { @apply bg-gray-300 rounded hover:bg-gray-400; }
-
-/* Table sticky header */
-.table-container {
-  max-height: 60vh;
-  overflow: auto;
+/* ── Grain overlay ── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 200px 200px;
 }
 
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #141310; }
+::-webkit-scrollbar-thumb { background: #2A2824; border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: #C9A84C; }
+
+/* ── Table sticky header ── */
+.table-container { max-height: 60vh; overflow: auto; }
 .table-container thead th {
-  position: sticky;
-  top: 0;
-  z-index: 10;
+  position: sticky; top: 0; z-index: 10;
   background-color: #e8f0fe;
 }
+
+/* ── Animation delays for staggered reveal ── */
+.delay-1 { animation-delay: 0.1s; }
+.delay-2 { animation-delay: 0.2s; }
+.delay-3 { animation-delay: 0.35s; }
+.delay-4 { animation-delay: 0.5s; }
+.delay-5 { animation-delay: 0.65s; }

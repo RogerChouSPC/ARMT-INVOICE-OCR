@@ -17,7 +17,6 @@ async function readAllEntries(reader: FileSystemDirectoryReader): Promise<FileSy
 
 async function collectPdfsFromItems(items: DataTransferItemList): Promise<File[]> {
   const files: File[] = []
-
   const processEntry = async (entry: FileSystemEntry): Promise<void> => {
     if (entry.isFile) {
       await new Promise<void>(resolve => {
@@ -32,21 +31,18 @@ async function collectPdfsFromItems(items: DataTransferItemList): Promise<File[]
       await Promise.all(entries.map(processEntry))
     }
   }
-
   const entries = Array.from(items)
     .map(item => item.webkitGetAsEntry())
     .filter((e): e is FileSystemEntry => e !== null)
-
   await Promise.all(entries.map(processEntry))
   return files
 }
 
 export default function UploadZone({ onFiles, disabled }: UploadZoneProps) {
-  const fileRef = useRef<HTMLInputElement>(null)
+  const fileRef   = useRef<HTMLInputElement>(null)
   const folderRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
 
-  // webkitdirectory is non-standard; set via DOM attribute to avoid TS errors
   useEffect(() => {
     if (folderRef.current) {
       folderRef.current.setAttribute('webkitdirectory', '')
@@ -57,9 +53,7 @@ export default function UploadZone({ onFiles, disabled }: UploadZoneProps) {
   const handleFiles = useCallback(
     (files: FileList | null) => {
       if (!files || disabled) return
-      const pdfs = Array.from(files).filter(
-        f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')
-      )
+      const pdfs = Array.from(files).filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'))
       if (pdfs.length) onFiles(pdfs)
     },
     [onFiles, disabled]
@@ -87,59 +81,63 @@ export default function UploadZone({ onFiles, disabled }: UploadZoneProps) {
 
   return (
     <div
-      className={`
-        card p-12 flex flex-col items-center justify-center gap-5
-        border-2 border-dashed transition-all duration-200 select-none
-        ${dragging ? 'border-google-blue bg-google-blue-light scale-[1.01]' : 'border-gray-200 hover:border-google-blue hover:bg-gray-50'}
-        ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-      `}
+      className={`relative transition-all duration-300 select-none ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+      style={{
+        border: `1px dashed ${dragging ? 'rgba(201,168,76,0.7)' : 'rgba(201,168,76,0.2)'}`,
+        borderRadius: '4px',
+        background: dragging ? 'rgba(201,168,76,0.04)' : 'rgba(20,19,16,0.6)',
+        boxShadow: dragging ? '0 0 32px rgba(201,168,76,0.08), inset 0 0 32px rgba(201,168,76,0.03)' : 'none',
+        backdropFilter: 'blur(8px)',
+      }}
       onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
       onDragLeave={() => setDragging(false)}
       onDrop={onDrop}
       onClick={() => !disabled && fileRef.current?.click()}
     >
-      {/* File input — individual PDFs */}
-      <input ref={fileRef} type="file" accept="application/pdf" multiple className="hidden"
-        onChange={(e) => handleFiles(e.target.files)} disabled={disabled} />
-      {/* Folder input — whole directory */}
-      <input ref={folderRef} type="file" accept="application/pdf" multiple className="hidden"
-        onChange={(e) => handleFiles(e.target.files)} disabled={disabled} />
+      <input ref={fileRef}   type="file" accept="application/pdf" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} disabled={disabled} />
+      <input ref={folderRef} type="file" accept="application/pdf" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} disabled={disabled} />
 
-      <div className={`w-16 h-16 rounded-full flex items-center justify-center transition-colors ${dragging ? 'bg-google-blue' : 'bg-google-blue-light'}`}>
-        <svg viewBox="0 0 24 24" className={`w-8 h-8 transition-colors ${dragging ? 'fill-white' : 'fill-google-blue'}`}>
-          <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z" />
-        </svg>
-      </div>
-
-      <div className="text-center">
-        <p className="text-lg font-medium text-gray-700">
-          {dragging ? 'Drop PDFs or folders here' : 'Upload Invoice PDFs'}
-        </p>
-        <p className="text-sm text-gray-500 mt-1">
-          Drag & drop files or folders ·{' '}
-          <span className="text-google-blue font-medium">browse files</span>
-          {' · '}
-          <span
-            className="text-google-blue font-medium cursor-pointer hover:underline"
-            onClick={browseFolder}
+      <div className="flex items-center justify-between px-8 py-6">
+        {/* Left: upload arrow icon */}
+        <div className="flex items-center gap-6">
+          <div
+            className="w-10 h-10 flex items-center justify-center transition-all duration-300"
+            style={{
+              border: `1px solid ${dragging ? 'rgba(201,168,76,0.6)' : 'rgba(201,168,76,0.25)'}`,
+              borderRadius: '2px',
+              transform: dragging ? 'translateY(-2px)' : 'none',
+            }}
           >
-            browse folder
-          </span>
-        </p>
-        <p className="text-xs text-gray-400 mt-2">
-          PDF files only · Thai language invoices · Subfolders supported
-        </p>
-      </div>
+            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="#C9A84C" strokeWidth="1.5">
+              <path d="M12 16V8m0 0L9 11m3-3l3 3" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M3 15v2a4 4 0 004 4h10a4 4 0 004-4v-2" strokeLinecap="round"/>
+            </svg>
+          </div>
+          <div>
+            <p className="font-mono text-xs tracking-widest uppercase text-cream">
+              {dragging ? 'Release to upload' : 'Drop PDFs here'}
+            </p>
+            <p className="font-mono text-[10px] tracking-wide text-faint mt-0.5">
+              Thai invoices · PDF only · Subfolders supported
+            </p>
+          </div>
+        </div>
 
-      <div className="flex items-center gap-4 text-xs text-gray-400">
-        <span className="flex items-center gap-1">
-          <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-gray-400"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
-          Google Vision OCR
-        </span>
-        <span className="flex items-center gap-1">
-          <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-gray-400"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
-          22-column Excel output
-        </span>
+        {/* Right: action links */}
+        <div className="flex items-center gap-6">
+          <div className="h-8 w-px bg-border" />
+          <div className="flex items-center gap-5">
+            <span className="font-mono text-[11px] tracking-widest uppercase text-gold hover:text-gold-light transition-colors">
+              Browse files
+            </span>
+            <span
+              className="font-mono text-[11px] tracking-widest uppercase text-muted hover:text-gold transition-colors cursor-pointer"
+              onClick={browseFolder}
+            >
+              Browse folder
+            </span>
+          </div>
+        </div>
       </div>
     </div>
   )
