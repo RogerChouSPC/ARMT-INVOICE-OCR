@@ -124,6 +124,22 @@ export default function App() {
     setStatuses([])
   }
 
+  const refreshCustomerMapping = useCallback(() => {
+    const cm = getCustomerMasterRows()
+    setRows(prev => prev.map(row => {
+      if (!row.taxid) return row
+      const matches = cm.filter(c => c.taxid === row.taxid)
+      if (matches.length === 0) return row
+      if (matches.length === 1) {
+        return { ...row, customergroup: matches[0].customergroup, customercode: matches[0].customercode }
+      }
+      // Multiple entries for same taxid — pick best by matching existing customergroup text
+      const hint = row.customergroup.toLowerCase()
+      const best = matches.find(m => hint.includes(m.store_name.toLowerCase())) ?? matches[0]
+      return { ...row, customergroup: best.customergroup, customercode: best.customercode }
+    }))
+  }, [])
+
   const allDone = statuses.length > 0 && statuses.every((s) => s.state === 'done' || s.state === 'error')
 
   return (
@@ -174,6 +190,17 @@ export default function App() {
                       onChange={(e) => e.target.files && processFiles(Array.from(e.target.files))} />
                   </label>
                 )}
+                <button
+                  className="btn-secondary"
+                  onClick={refreshCustomerMapping}
+                  disabled={isProcessing}
+                  title="Re-apply latest Customer Master to existing results"
+                >
+                  <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
+                    <path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
+                  </svg>
+                  Refresh Mapping
+                </button>
                 <button
                   className="btn-primary"
                   onClick={() => exportToExcel(rows)}
