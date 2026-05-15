@@ -33,7 +33,7 @@ export interface Version {
 const LS_ROWS    = 'armt_cm_rows'
 const LS_HISTORY = 'armt_cm_history'
 const LS_VER     = 'armt_cm_ver'
-const SCHEMA_VER = '2' // bump to wipe broken history on next load
+const SCHEMA_VER = '3'
 
 // ── Seed data ─────────────────────────────────────────────────────────────────
 const SEED: Omit<CustomerRow, 'id'>[] = [
@@ -147,8 +147,9 @@ export default function CustomerMasterPage() {
 
   // ── load from localStorage ────────────────────────────────────────────────
   useEffect(() => {
-    // Migrate: clear history created before snapshot fix (those had snapshot: [])
+    // Migration: reset to seed data and clear broken history
     if (localStorage.getItem(LS_VER) !== SCHEMA_VER) {
+      localStorage.removeItem(LS_ROWS)
       localStorage.removeItem(LS_HISTORY)
       localStorage.setItem(LS_VER, SCHEMA_VER)
     }
@@ -156,8 +157,9 @@ export default function CustomerMasterPage() {
     if (saved) {
       setRows(saved)
     } else {
-      setRows(seedWithIds())
-      setDirty(true)
+      const seedRows = seedWithIds()
+      localStorage.setItem(LS_ROWS, JSON.stringify(seedRows))
+      setRows(seedRows)
     }
     setHistory(lsGetHistory())
     setLoading(false)
@@ -213,8 +215,6 @@ export default function CustomerMasterPage() {
       showToast('Cannot restore: this version has no data snapshot', false)
       return
     }
-
-    if (!confirm(`Restore to "${version.label}"?\n${version.snapshot.length} rows · ${fmtDate(version.timestamp)}`)) return
 
     localStorage.setItem(LS_ROWS, JSON.stringify(version.snapshot))
     setRows(version.snapshot)
