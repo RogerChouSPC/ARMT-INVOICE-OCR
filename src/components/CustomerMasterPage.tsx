@@ -202,7 +202,6 @@ export default function CustomerMasterPage() {
   const restore = useCallback((id: string) => {
     const version = history.find(v => v.id === id)
     if (!version) return
-    console.log('[restore] snapshot length:', version.snapshot.length, 'snapshot[25]:', version.snapshot[25])
 
     const currentRows = lsGetRows() || rows
     const changes = diff(currentRows, version.snapshot)
