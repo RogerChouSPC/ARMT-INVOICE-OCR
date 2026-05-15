@@ -13,9 +13,9 @@ import { EMPTY_ROW } from '@/types/invoice'
 type Tab = 'ocr' | 'customer-master'
 
 export default function App() {
-  const [activeTab, setActiveTab]     = useState<Tab>('ocr')
-  const [statuses, setStatuses]       = useState<FileProcessingStatus[]>([])
-  const [rows, setRows]               = useState<InvoiceRow[]>([])
+  const [activeTab, setActiveTab]       = useState<Tab>('ocr')
+  const [statuses, setStatuses]         = useState<FileProcessingStatus[]>([])
+  const [rows, setRows]                 = useState<InvoiceRow[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
 
   const updateStatus = useCallback(
@@ -117,108 +117,73 @@ export default function App() {
   }, [])
 
   const allDone = statuses.length > 0 && statuses.every((s) => s.state === 'done' || s.state === 'error')
-  const isEmpty = rows.length === 0 && statuses.length === 0
 
   return (
-    <div className="min-h-screen flex flex-col bg-ink">
+    <div className="min-h-screen flex flex-col bg-background">
       <Header rowCount={rows.length} activeTab={activeTab} onTabChange={setActiveTab} />
 
       {activeTab === 'customer-master' && (
-        <main className="flex-1 max-w-screen-2xl mx-auto w-full px-8 py-8">
+        <main className="flex-1 max-w-screen-2xl mx-auto w-full px-6 py-8">
           <CustomerMasterPage />
         </main>
       )}
 
       {activeTab === 'ocr' && (
-        <main className="flex-1 max-w-screen-2xl mx-auto w-full px-8 flex flex-col">
-
-          {/* ── Editorial hero (empty state) ── */}
-          {isEmpty && (
-            <div className="flex flex-col justify-between flex-1 py-12 min-h-[calc(100vh-3.5rem)]">
-
-              {/* Headline block */}
-              <div className="flex-1 flex flex-col justify-center">
-                <p className="font-mono text-[10px] tracking-widest text-gold uppercase mb-8 animate-reveal delay-1"
-                   style={{ opacity: 0 }}>
-                  Thai Document Intelligence
-                </p>
-                <h1 className="font-display font-light text-cream leading-[0.88] animate-reveal delay-2"
-                    style={{ fontSize: 'clamp(4rem, 11vw, 10rem)', letterSpacing: '-0.02em', opacity: 0 }}>
-                  Invoice<br />
-                  <span className="italic" style={{ color: 'rgba(232,226,217,0.45)' }}>Extractor</span>
-                </h1>
-
-                {/* Metadata row */}
-                <div className="flex items-center gap-6 mt-10 animate-reveal delay-3" style={{ opacity: 0 }}>
-                  <div className="h-px flex-1 max-w-[120px]" style={{ background: 'linear-gradient(90deg, #C9A84C, transparent)', opacity: 0.4 }} />
-                  <span className="font-mono text-[10px] tracking-widest text-muted uppercase">Powered by Google Gemini</span>
-                  <span className="font-mono text-[10px] text-faint">·</span>
-                  <span className="font-mono text-[10px] tracking-widest text-muted uppercase">22-column Excel output</span>
-                </div>
-              </div>
-
-              {/* Upload zone anchored to bottom */}
-              <div className="animate-reveal delay-4" style={{ opacity: 0 }}>
-                <div className="gold-line mb-4" />
-                <UploadZone onFiles={processFiles} disabled={isProcessing} />
-              </div>
+        <main className="flex-1 max-w-screen-2xl mx-auto w-full px-6 py-8 flex flex-col gap-6">
+          {rows.length === 0 && statuses.length === 0 && (
+            <div className="text-center py-4 animate-fade-in">
+              <h2 className="text-2xl font-semibold text-foreground">Extract Thai Invoice Data</h2>
+              <p className="text-sm text-muted-foreground mt-1">Powered by Google Gemini · 22-column Excel output</p>
             </div>
           )}
 
-          {/* ── Active / results state ── */}
-          {!isEmpty && (
-            <div className="flex flex-col gap-5 py-8">
-              <UploadZone onFiles={processFiles} disabled={isProcessing} />
-              <ProcessingStatus items={statuses} />
+          <UploadZone onFiles={processFiles} disabled={isProcessing} />
+          <ProcessingStatus items={statuses} />
 
-              {rows.length > 0 && (
-                <>
-                  <ResultsTable rows={rows} onUpdate={setRows} />
+          {rows.length > 0 && (
+            <>
+              <ResultsTable rows={rows} onUpdate={setRows} />
 
-                  <div className="flex items-center justify-between pt-2 pb-6">
-                    <button className="btn-secondary text-danger hover:text-danger hover:border-danger" onClick={clearAll}>
-                      <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current">
-                        <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+              <div className="flex items-center justify-between">
+                <button className="btn-secondary text-destructive hover:text-destructive hover:border-destructive/50" onClick={clearAll}>
+                  <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
+                    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+                  </svg>
+                  Clear all
+                </button>
+
+                <div className="flex items-center gap-3">
+                  {allDone && !isProcessing && (
+                    <label className="btn-secondary cursor-pointer">
+                      <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
+                        <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
                       </svg>
-                      Clear all
-                    </button>
-
-                    <div className="flex items-center gap-3">
-                      {allDone && !isProcessing && (
-                        <label className="btn-secondary cursor-pointer">
-                          <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current">
-                            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
-                          </svg>
-                          Add more
-                          <input type="file" accept="application/pdf" multiple className="hidden"
-                            onChange={(e) => e.target.files && processFiles(Array.from(e.target.files))} />
-                        </label>
-                      )}
-                      <button className="btn-secondary" onClick={refreshCustomerMapping} disabled={isProcessing}>
-                        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current">
-                          <path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
-                        </svg>
-                        Refresh Mapping
-                      </button>
-                      <button className="btn-primary" onClick={() => exportToExcel(rows)} disabled={rows.length === 0}>
-                        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current">
-                          <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
-                        </svg>
-                        Download Excel
-                      </button>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
+                      Add more
+                      <input type="file" accept="application/pdf" multiple className="hidden"
+                        onChange={(e) => e.target.files && processFiles(Array.from(e.target.files))} />
+                    </label>
+                  )}
+                  <button className="btn-secondary" onClick={refreshCustomerMapping} disabled={isProcessing}>
+                    <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
+                      <path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
+                    </svg>
+                    Refresh Mapping
+                  </button>
+                  <button className="btn-primary" onClick={() => exportToExcel(rows)} disabled={rows.length === 0}>
+                    <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
+                      <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
+                    </svg>
+                    Download Excel
+                  </button>
+                </div>
+              </div>
+            </>
           )}
         </main>
       )}
 
-      <footer className="border-t border-border py-4 px-8">
-        <p className="font-mono text-[9px] tracking-widest text-faint uppercase">
-          ARMT Invoice OCR &thinsp;·&thinsp; Google Gemini &thinsp;·&thinsp; Thai Language Support
-        </p>
+      <footer className="text-center text-xs text-muted-foreground py-4 border-t border-border">
+        ARMT Invoice OCR · Google Gemini · Thai Language Support
       </footer>
     </div>
   )
