@@ -32,6 +32,8 @@ export interface Version {
 // ── localStorage keys ─────────────────────────────────────────────────────────
 const LS_ROWS    = 'armt_cm_rows'
 const LS_HISTORY = 'armt_cm_history'
+const LS_VER     = 'armt_cm_ver'
+const SCHEMA_VER = '2' // bump to wipe broken history on next load
 
 // ── Seed data ─────────────────────────────────────────────────────────────────
 const SEED: Omit<CustomerRow, 'id'>[] = [
@@ -145,12 +147,17 @@ export default function CustomerMasterPage() {
 
   // ── load from localStorage ────────────────────────────────────────────────
   useEffect(() => {
+    // Migrate: clear history created before snapshot fix (those had snapshot: [])
+    if (localStorage.getItem(LS_VER) !== SCHEMA_VER) {
+      localStorage.removeItem(LS_HISTORY)
+      localStorage.setItem(LS_VER, SCHEMA_VER)
+    }
     const saved = lsGetRows()
     if (saved) {
       setRows(saved)
     } else {
       setRows(seedWithIds())
-      setDirty(true) // seed data not saved yet
+      setDirty(true)
     }
     setHistory(lsGetHistory())
     setLoading(false)
@@ -198,30 +205,21 @@ export default function CustomerMasterPage() {
 
   // ── restore from version ──────────────────────────────────────────────────
   const restore = useCallback((id: string) => {
-    if (!confirm('Restore this version? Current data will be saved as a new version first.')) return
     const version = history.find(v => v.id === id)
     if (!version) return
 
-    const currentRows = lsGetRows() || rows
-    const changes = diff(currentRows, version.snapshot)
-    const saveVersion: Version = {
-      id: Date.now().toString(),
-      timestamp: new Date().toISOString(),
-      label: `Restored to: ${fmtDate(version.timestamp)}`,
-      added:    changes.filter(c => c.type === 'add').length,
-      deleted:  changes.filter(c => c.type === 'delete').length,
-      modified: changes.filter(c => c.type === 'edit').length,
-      changes,
-      snapshot: currentRows,
+    if (!version.snapshot || version.snapshot.length === 0) {
+      showToast('Cannot restore: this version has no data snapshot', false)
+      return
     }
-    const newHistory = [saveVersion, ...history].slice(0, 50)
+
+    if (!confirm(`Restore to "${version.label}"?\n${version.snapshot.length} rows · ${fmtDate(version.timestamp)}`)) return
+
     localStorage.setItem(LS_ROWS, JSON.stringify(version.snapshot))
-    localStorage.setItem(LS_HISTORY, JSON.stringify(newHistory))
     setRows(version.snapshot)
-    setHistory(newHistory)
     setDirty(false)
-    showToast('Restored to previous version')
-  }, [history, rows])
+    showToast(`Restored: ${version.snapshot.length} rows`)
+  }, [history])
 
   // ── cell edit ─────────────────────────────────────────────────────────────
   const startEdit = (rowIdx: number, col: keyof CustomerRow) => {
@@ -464,17 +462,19 @@ export default function CustomerMasterPage() {
                       <div className="min-w-0 flex-1">
                         <div className="text-xs font-medium text-gray-700 truncate">{v.label}</div>
                         <div className="text-[11px] text-gray-400 mt-0.5">{fmtDate(v.timestamp)}</div>
-                        <div className="flex gap-2 mt-1">
+                        <div className="flex gap-2 mt-1 flex-wrap">
+                          {v.snapshot?.length > 0 && <span className="text-[11px] text-gray-500">{v.snapshot.length} rows</span>}
                           {v.added > 0   && <span className="text-[11px] text-google-green">+{v.added}</span>}
                           {v.deleted > 0 && <span className="text-[11px] text-google-red">-{v.deleted}</span>}
                           {v.modified > 0 && <span className="text-[11px] text-yellow-600">~{v.modified}</span>}
-                          {v.added === 0 && v.deleted === 0 && v.modified === 0 &&
+                          {v.added === 0 && v.deleted === 0 && v.modified === 0 && (!v.snapshot || v.snapshot.length === 0) &&
                             <span className="text-[11px] text-gray-400">no changes</span>}
                         </div>
                       </div>
                       <button
                         onClick={e => { e.stopPropagation(); restore(v.id) }}
-                        className="shrink-0 text-[11px] text-google-blue hover:underline"
+                        disabled={!v.snapshot || v.snapshot.length === 0}
+                        className="shrink-0 text-[11px] text-google-blue hover:underline disabled:text-gray-300 disabled:cursor-not-allowed"
                       >
                         Restore
                       </button>
