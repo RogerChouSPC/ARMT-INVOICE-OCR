@@ -26,7 +26,7 @@ export interface Version {
 const LS_ROWS    = 'armt_cm_rows'
 const LS_HISTORY = 'armt_cm_history'
 const LS_VER     = 'armt_cm_schema_ver'
-const SCHEMA_VER = '2'
+const SCHEMA_VER = '3'
 
 // ── Seed data ─────────────────────────────────────────────────────────────────
 const SEED: Omit<CustomerRow, 'id'>[] = [
@@ -140,8 +140,9 @@ export default function CustomerMasterPage() {
 
   // ── load from localStorage ────────────────────────────────────────────────
   useEffect(() => {
-    // Migration: clear history entries created before snapshot fix
+    // Migration: reset to seed data and clear broken history
     if (localStorage.getItem(LS_VER) !== SCHEMA_VER) {
+      localStorage.removeItem(LS_ROWS)
       localStorage.removeItem(LS_HISTORY)
       localStorage.setItem(LS_VER, SCHEMA_VER)
     }
