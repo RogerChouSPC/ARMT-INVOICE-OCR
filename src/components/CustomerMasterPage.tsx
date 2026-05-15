@@ -25,6 +25,8 @@ export interface Version {
 // ── localStorage keys ─────────────────────────────────────────────────────────
 const LS_ROWS    = 'armt_cm_rows'
 const LS_HISTORY = 'armt_cm_history'
+const LS_VER     = 'armt_cm_schema_ver'
+const SCHEMA_VER = '2'
 
 // ── Seed data ─────────────────────────────────────────────────────────────────
 const SEED: Omit<CustomerRow, 'id'>[] = [
@@ -138,12 +140,18 @@ export default function CustomerMasterPage() {
 
   // ── load from localStorage ────────────────────────────────────────────────
   useEffect(() => {
+    // Migration: clear history entries created before snapshot fix
+    if (localStorage.getItem(LS_VER) !== SCHEMA_VER) {
+      localStorage.removeItem(LS_HISTORY)
+      localStorage.setItem(LS_VER, SCHEMA_VER)
+    }
     const saved = lsGetRows()
     if (saved) {
       setRows(saved)
     } else {
-      setRows(seedWithIds())
-      setDirty(true) // seed data not saved yet
+      const seedRows = seedWithIds()
+      localStorage.setItem(LS_ROWS, JSON.stringify(seedRows))
+      setRows(seedRows)
     }
     setHistory(lsGetHistory())
     setLoading(false)
