@@ -132,7 +132,11 @@ export default function App() {
     <div className="min-h-screen flex flex-col">
       <Header rowCount={rows.length} activeTab={activeTab} onTabChange={setActiveTab} />
 
-      {activeTab === 'customer-master' && <CustomerMasterPage />}
+      {activeTab === 'customer-master' && (
+        <main className="flex-1 max-w-screen-2xl mx-auto w-full px-6 py-8">
+          <CustomerMasterPage />
+        </main>
+      )}
 
       {activeTab === 'ocr' && (
       <main className="flex-1 max-w-screen-2xl mx-auto w-full px-6 py-8 flex flex-col gap-6">

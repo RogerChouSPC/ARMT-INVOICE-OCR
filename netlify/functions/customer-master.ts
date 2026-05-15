@@ -61,6 +61,15 @@ function diff(before: CustomerRow[], after: CustomerRow[]): Change[] {
   return changes
 }
 
+async function getState(store: ReturnType<typeof getStore>): Promise<State> {
+  try {
+    const raw = await store.get('state', { type: 'text' })
+    return raw ? JSON.parse(raw) : { rows: [], history: [] }
+  } catch {
+    return { rows: [], history: [] }
+  }
+}
+
 const handler: Handler = async (event) => {
   const cors = {
     'Content-Type': 'application/json',
@@ -73,71 +82,80 @@ const handler: Handler = async (event) => {
 
   // GET — return current rows + history
   if (event.httpMethod === 'GET') {
-    const raw = await store.get('state', { type: 'text' })
-    const state: State = raw ? JSON.parse(raw) : { rows: [], history: [] }
-    return { statusCode: 200, headers: cors, body: JSON.stringify(state) }
+    try {
+      const state = await getState(store)
+      return { statusCode: 200, headers: cors, body: JSON.stringify(state) }
+    } catch (e) {
+      return { statusCode: 500, headers: cors, body: JSON.stringify({ error: String(e) }) }
+    }
   }
 
   // POST — save new version
   if (event.httpMethod === 'POST') {
-    const body = JSON.parse(event.body || '{}')
-    const newRows: CustomerRow[] = body.rows || []
-    const label: string = body.label || 'Web edit'
+    try {
+      const body = JSON.parse(event.body || '{}')
+      const newRows: CustomerRow[] = body.rows || []
+      const label: string = body.label || 'Web edit'
 
-    const raw = await store.get('state', { type: 'text' })
-    const state: State = raw ? JSON.parse(raw) : { rows: [], history: [] }
+      const state = await getState(store)
 
-    const changes = diff(state.rows, newRows)
-    const version: Version = {
-      id: Date.now().toString(),
-      timestamp: new Date().toISOString(),
-      label,
-      added:    changes.filter(c => c.type === 'add').length,
-      deleted:  changes.filter(c => c.type === 'delete').length,
-      modified: changes.filter(c => c.type === 'edit').length,
-      changes,
-      snapshot: state.rows,
+      const changes = diff(state.rows, newRows)
+      const version: Version = {
+        id: Date.now().toString(),
+        timestamp: new Date().toISOString(),
+        label,
+        added:    changes.filter(c => c.type === 'add').length,
+        deleted:  changes.filter(c => c.type === 'delete').length,
+        modified: changes.filter(c => c.type === 'edit').length,
+        changes,
+        snapshot: state.rows,
+      }
+
+      const newState: State = {
+        rows: newRows,
+        history: [version, ...state.history].slice(0, 50),
+      }
+
+      await store.set('state', JSON.stringify(newState))
+      return { statusCode: 200, headers: cors, body: JSON.stringify({ ok: true, id: version.id }) }
+    } catch (e) {
+      return { statusCode: 500, headers: cors, body: JSON.stringify({ error: String(e) }) }
     }
-
-    const newState: State = {
-      rows: newRows,
-      history: [version, ...state.history].slice(0, 50),
-    }
-
-    await store.set('state', JSON.stringify(newState))
-    return { statusCode: 200, headers: cors, body: JSON.stringify({ ok: true, id: version.id }) }
   }
 
   // PUT — restore snapshot from a version
   if (event.httpMethod === 'PUT') {
-    const body = JSON.parse(event.body || '{}')
-    const id: string = body.id
+    try {
+      const body = JSON.parse(event.body || '{}')
+      const id: string = body.id
 
-    const raw = await store.get('state', { type: 'text' })
-    const state: State = raw ? JSON.parse(raw) : { rows: [], history: [] }
+      const state = await getState(store)
 
-    const version = state.history.find(v => v.id === id)
-    if (!version) return { statusCode: 404, headers: cors, body: JSON.stringify({ error: 'Not found' }) }
+      const version = state.history.find(v => v.id === id)
+      if (!version) return { statusCode: 404, headers: cors, body: JSON.stringify({ error: 'Not found' }) }
 
-    const changes = diff(state.rows, version.snapshot)
-    const saveVersion: Version = {
-      id: Date.now().toString(),
-      timestamp: new Date().toISOString(),
-      label: `Restored to ${new Date(Number(id)).toLocaleString()}`,
-      added:    changes.filter(c => c.type === 'add').length,
-      deleted:  changes.filter(c => c.type === 'delete').length,
-      modified: changes.filter(c => c.type === 'edit').length,
-      changes,
-      snapshot: state.rows,
+      const changes = diff(state.rows, version.snapshot)
+      const saveVersion: Version = {
+        id: Date.now().toString(),
+        timestamp: new Date().toISOString(),
+        label: `Restored to ${new Date(Number(id)).toLocaleString()}`,
+        added:    changes.filter(c => c.type === 'add').length,
+        deleted:  changes.filter(c => c.type === 'delete').length,
+        modified: changes.filter(c => c.type === 'edit').length,
+        changes,
+        snapshot: state.rows,
+      }
+
+      const newState: State = {
+        rows: version.snapshot,
+        history: [saveVersion, ...state.history].slice(0, 50),
+      }
+
+      await store.set('state', JSON.stringify(newState))
+      return { statusCode: 200, headers: cors, body: JSON.stringify({ ok: true, rows: version.snapshot }) }
+    } catch (e) {
+      return { statusCode: 500, headers: cors, body: JSON.stringify({ error: String(e) }) }
     }
-
-    const newState: State = {
-      rows: version.snapshot,
-      history: [saveVersion, ...state.history].slice(0, 50),
-    }
-
-    await store.set('state', JSON.stringify(newState))
-    return { statusCode: 200, headers: cors, body: JSON.stringify({ ok: true, rows: version.snapshot }) }
   }
 
   return { statusCode: 405, headers: cors, body: 'Method Not Allowed' }

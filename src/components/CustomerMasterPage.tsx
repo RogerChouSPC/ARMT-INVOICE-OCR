@@ -83,10 +83,15 @@ export default function CustomerMasterPage() {
     fetch('/.netlify/functions/customer-master')
       .then(r => r.json())
       .then(data => {
-        setRows(data.rows?.length ? data.rows : seedWithIds())
+        if (data.rows?.length) {
+          setRows(data.rows)
+        } else {
+          setRows(seedWithIds())
+          setDirty(true) // seed data not on server yet — enable Save
+        }
         setHistory(data.history || [])
       })
-      .catch(() => setRows(seedWithIds()))
+      .catch(() => { setRows(seedWithIds()); setDirty(true) })
       .finally(() => setLoading(false))
   }, [])
 
@@ -97,15 +102,22 @@ export default function CustomerMasterPage() {
 
   // ── save ──────────────────────────────────────────────────────────────────
   const save = useCallback(async () => {
+    // Commit any in-progress cell edit before saving
+    const finalRows = editCell
+      ? rows.map((r, i) => i === editCell.row ? { ...r, [editCell.col]: editValue } : r)
+      : rows
+    if (editCell) setEditCell(null)
+
     setSaving(true)
     try {
       const res = await fetch('/.netlify/functions/customer-master', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rows, label: 'Web edit' }),
+        body: JSON.stringify({ rows: finalRows, label: 'Web edit' }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Save failed')
+      setRows(finalRows)
       // Reload history
       const state = await fetch('/.netlify/functions/customer-master').then(r => r.json())
       setHistory(state.history || [])
@@ -116,7 +128,7 @@ export default function CustomerMasterPage() {
     } finally {
       setSaving(false)
     }
-  }, [rows])
+  }, [rows, editCell, editValue])
 
   // ── restore ───────────────────────────────────────────────────────────────
   const restore = useCallback(async (id: string) => {
