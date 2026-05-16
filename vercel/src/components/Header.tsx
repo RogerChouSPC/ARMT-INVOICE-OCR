@@ -26,7 +26,7 @@ export default function Header({ rowCount, activeTab, onTabChange }: HeaderProps
   return (
     <header className="sticky top-0 z-20 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border">
       {/* Main nav row */}
-      <div className="max-w-screen-2xl mx-auto px-6 h-16 flex items-center justify-between">
+      <div className="w-full px-6 h-16 flex items-center justify-between">
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-3">
             <motion.div
@@ -68,7 +68,7 @@ export default function Header({ rowCount, activeTab, onTabChange }: HeaderProps
       </div>
 
       {/* Breadcrumb row */}
-      <div className="max-w-screen-2xl mx-auto px-6 pb-2.5">
+      <div className="w-full px-6 pb-2.5">
         <Breadcrumb>
           <BreadcrumbList>
             <BreadcrumbItem>

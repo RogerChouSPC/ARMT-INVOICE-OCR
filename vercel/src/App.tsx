@@ -123,13 +123,13 @@ export default function App() {
       <Header rowCount={rows.length} activeTab={activeTab} onTabChange={setActiveTab} />
 
       {activeTab === 'customer-master' && (
-        <main className="flex-1 max-w-screen-2xl mx-auto w-full px-6 py-8">
+        <main className="flex-1 w-full px-6 py-8">
           <CustomerMasterPage />
         </main>
       )}
 
       {activeTab === 'ocr' && (
-        <main className="flex-1 max-w-screen-2xl mx-auto w-full px-6 py-8 flex flex-col gap-6">
+        <main className="flex-1 w-full px-6 py-8 flex flex-col gap-6">
           {rows.length === 0 && statuses.length === 0 && (
             <div className="text-center py-4 animate-fade-in">
               <h2 className="text-2xl font-semibold text-foreground">Extract Thai Invoice Data</h2>
