@@ -45,7 +45,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const init = async () => {
       try {
         await msalInstance.initialize()
-        const result = await msalInstance.handleRedirectPromise()
+        // navigateToLoginRequestUrl:false prevents MSAL from navigating to the
+        // token endpoint URL after processing the auth code (causes AADSTS900561)
+        const result = await msalInstance.handleRedirectPromise({ navigateToLoginRequestUrl: false })
 
         if (result?.account) {
           setUser({
