@@ -21,16 +21,7 @@ export default function App() {
   const [rows, setRows]                 = useState<InvoiceRow[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-3">
-        <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-        <p className="text-sm text-muted-foreground">Signing in…</p>
-      </div>
-    )
-  }
-
-  if (!user) return <LoginPage initError={error} />
+  if (!user) return <LoginPage initError={error} isLoading={loading} />
 
   const updateStatus = useCallback(
     (idx: number, patch: Partial<FileProcessingStatus>) =>

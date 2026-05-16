@@ -4,34 +4,35 @@ import { useAuth } from '@/auth/AuthProvider'
 
 interface Props {
   initError?: string | null
+  isLoading?: boolean
 }
 
-export default function LoginPage({ initError }: Props) {
+export default function LoginPage({ initError, isLoading }: Props) {
   const { login } = useAuth()
-  const [loading, setLoading] = useState(false)
+  const [signing, setSigning] = useState(false)
   const [error, setError]     = useState<string | null>(null)
 
   const handleLogin = async () => {
-    setLoading(true)
+    setSigning(true)
     setError(null)
     try {
       await login()
     } catch (e) {
       setError(`Sign-in failed: ${(e as Error).message}`)
-      setLoading(false)
+      setSigning(false)
     }
   }
 
   const handleClearAndRetry = () => {
-    // Clear all MSAL and app storage then reload for a completely fresh start
-    Object.keys(localStorage).forEach(k => {
-      if (k.startsWith('msal.') || k.startsWith('armt_')) localStorage.removeItem(k)
-    })
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith('msal.')) localStorage.removeItem(key)
+    }
     sessionStorage.clear()
     window.location.reload()
   }
 
   const displayError = error ?? initError
+  const busy = isLoading || signing
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4">
@@ -61,6 +62,13 @@ export default function LoginPage({ initError }: Props) {
             </p>
           </div>
 
+          {isLoading && !displayError && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <div className="h-4 w-4 rounded-full border-2 border-muted-foreground border-t-transparent animate-spin flex-shrink-0" />
+              Checking session…
+            </div>
+          )}
+
           {displayError && (
             <div className="flex flex-col gap-2">
               <div className="text-sm text-destructive bg-destructive/10 rounded-2xl px-4 py-3 break-words">
@@ -68,7 +76,7 @@ export default function LoginPage({ initError }: Props) {
               </div>
               <button
                 onClick={handleClearAndRetry}
-                className="text-xs text-muted-foreground underline underline-offset-2 self-start pl-1"
+                className="text-xs text-muted-foreground underline underline-offset-2 self-start pl-1 hover:text-foreground"
               >
                 Clear session and try again
               </button>
@@ -77,16 +85,20 @@ export default function LoginPage({ initError }: Props) {
 
           <button
             onClick={handleLogin}
-            disabled={loading}
-            className="w-full flex items-center gap-3 px-4 py-3 bg-[#2F2F2F] hover:bg-[#1a1a1a] text-white rounded-xl text-sm font-medium transition-all duration-150 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
+            disabled={busy}
+            className="w-full flex items-center gap-3 px-4 py-3 bg-[#2F2F2F] hover:bg-[#1a1a1a] text-white rounded-xl text-sm font-medium transition-all duration-150 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <svg width="20" height="20" viewBox="0 0 21 21" xmlns="http://www.w3.org/2000/svg">
-              <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
-              <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
-              <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
-              <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
-            </svg>
-            {loading ? 'Redirecting to Microsoft…' : 'Sign in with Microsoft'}
+            {signing ? (
+              <div className="h-5 w-5 rounded-full border-2 border-white border-t-transparent animate-spin flex-shrink-0" />
+            ) : (
+              <svg width="20" height="20" viewBox="0 0 21 21" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0">
+                <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
+                <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
+                <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
+                <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
+              </svg>
+            )}
+            {signing ? 'Redirecting to Microsoft…' : isLoading ? 'Please wait…' : 'Sign in with Microsoft'}
           </button>
 
           <p className="text-xs text-muted-foreground text-center">

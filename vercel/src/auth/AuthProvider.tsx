@@ -17,10 +17,8 @@ interface AuthCtx {
   getToken: () => Promise<string | null>
 }
 
-// Single shared instance — must not be re-created (token cache lives in memory here)
 const msalInstance = new PublicClientApplication(msalConfig)
 
-// Clear only MSAL interaction/request state; leave token/account cache intact
 function clearInteractionState() {
   for (const key of Object.keys(localStorage)) {
     if (key.includes('.interaction.') || key.includes('.request.params') || key.includes('.nonce.')) {
@@ -37,6 +35,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [error, setError]     = useState<string | null>(null)
 
   useEffect(() => {
+    // Give MSAL 8 seconds max — if handleRedirectPromise hangs, unblock the UI
+    const timeout = setTimeout(() => {
+      setLoading(false)
+      setError('Sign-in timed out. Click "Sign in with Microsoft" to try again.')
+      clearInteractionState()
+    }, 8000)
+
     const init = async () => {
       try {
         await msalInstance.initialize()
@@ -59,21 +64,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
       } catch (e) {
-        // Clear stale interaction state so the next login attempt starts fresh
         clearInteractionState()
         const msg = (e as Error).message ?? String(e)
         console.error('MSAL init error:', msg)
         setError(`Sign-in error: ${msg}`)
       } finally {
+        clearTimeout(timeout)
         setLoading(false)
       }
     }
 
     init()
+    return () => clearTimeout(timeout)
   }, [])
 
   const login = async () => {
-    // Clear stale interaction state to prevent interaction_in_progress errors
     clearInteractionState()
     await msalInstance.loginRedirect(loginRequest)
   }
