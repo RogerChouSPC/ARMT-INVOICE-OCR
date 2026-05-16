@@ -7,10 +7,10 @@ export const msalConfig: Configuration = {
     redirectUri: window.location.origin,
   },
   cache: {
-    cacheLocation: 'sessionStorage',
+    cacheLocation: 'localStorage',
   },
 }
 
 export const loginRequest: PopupRequest = {
-  scopes: ['openid', 'profile', 'email', 'User.Read'],
+  scopes: ['openid', 'profile', 'email'],
 }

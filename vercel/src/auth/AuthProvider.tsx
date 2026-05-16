@@ -11,6 +11,7 @@ interface AuthUser {
 interface AuthCtx {
   user: AuthUser | null
   loading: boolean
+  error: string | null
   login: () => Promise<void>
   logout: () => void
   getToken: () => Promise<string | null>
@@ -20,41 +21,53 @@ const msalInstance = new PublicClientApplication(msalConfig)
 const AuthContext = createContext<AuthCtx | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser]       = useState<AuthUser | null>(null)
+  const [user, setUser]     = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError]   = useState<string | null>(null)
 
   useEffect(() => {
-    msalInstance.initialize().then(async () => {
-      // Process the redirect response if returning from Microsoft login
-      const result = await msalInstance.handleRedirectPromise().catch(() => null)
+    const init = async () => {
+      try {
+        await msalInstance.initialize()
 
-      if (result?.account) {
-        setUser({
-          name:  result.account.name ?? result.account.username,
-          email: result.account.username,
-          account: result.account,
-        })
-      } else {
-        const accounts = msalInstance.getAllAccounts()
-        if (accounts.length > 0) {
+        const result = await msalInstance.handleRedirectPromise()
+
+        if (result?.account) {
           setUser({
-            name:    accounts[0].name ?? accounts[0].username,
-            email:   accounts[0].username,
-            account: accounts[0],
+            name:    result.account.name ?? result.account.username,
+            email:   result.account.username,
+            account: result.account,
           })
+        } else {
+          const accounts = msalInstance.getAllAccounts()
+          if (accounts.length > 0) {
+            setUser({
+              name:    accounts[0].name ?? accounts[0].username,
+              email:   accounts[0].username,
+              account: accounts[0],
+            })
+          }
         }
+      } catch (e) {
+        console.error('MSAL init error:', e)
+        setError(`Auth error: ${(e as Error).message}`)
+      } finally {
+        setLoading(false)
       }
-      setLoading(false)
-    })
+    }
+
+    init()
   }, [])
 
-  // Full-page redirect to Microsoft — no popup, works in all browsers
   const login = async () => {
     await msalInstance.loginRedirect(loginRequest)
   }
 
   const logout = () => {
-    msalInstance.logoutRedirect({ account: user?.account, postLogoutRedirectUri: window.location.origin })
+    msalInstance.logoutRedirect({
+      account: user?.account,
+      postLogoutRedirectUri: window.location.origin,
+    })
   }
 
   const getToken = async (): Promise<string | null> => {
@@ -67,7 +80,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return result.accessToken
     } catch (e) {
       if (e instanceof InteractionRequiredAuthError) {
-        // Silent failed — do a redirect to refresh token
         await msalInstance.acquireTokenRedirect({ ...loginRequest, account: user.account })
       }
       return null
@@ -75,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, getToken }}>
+    <AuthContext.Provider value={{ user, loading, error, login, logout, getToken }}>
       {children}
     </AuthContext.Provider>
   )

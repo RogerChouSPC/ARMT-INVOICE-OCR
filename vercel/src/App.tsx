@@ -15,7 +15,7 @@ import { EMPTY_ROW } from '@/types/invoice'
 type Tab = 'ocr' | 'customer-master'
 
 export default function App() {
-  const { user, loading, logout, getToken } = useAuth()
+  const { user, loading, error, logout, getToken } = useAuth()
   const [activeTab, setActiveTab]       = useState<Tab>('ocr')
   const [statuses, setStatuses]         = useState<FileProcessingStatus[]>([])
   const [rows, setRows]                 = useState<InvoiceRow[]>([])
@@ -31,7 +31,7 @@ export default function App() {
     )
   }
 
-  if (!user) return <LoginPage />
+  if (!user) return <LoginPage initError={error} />
 
   const updateStatus = useCallback(
     (idx: number, patch: Partial<FileProcessingStatus>) =>

@@ -2,7 +2,11 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { useAuth } from '@/auth/AuthProvider'
 
-export default function LoginPage() {
+interface Props {
+  initError?: string | null
+}
+
+export default function LoginPage({ initError }: Props) {
   const { login } = useAuth()
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState<string | null>(null)
@@ -11,12 +15,14 @@ export default function LoginPage() {
     setLoading(true)
     setError(null)
     try {
-      await login() // triggers full-page redirect — code below won't run
-    } catch {
-      setError('Sign-in failed. Please try again.')
+      await login()
+    } catch (e) {
+      setError(`Sign-in failed: ${(e as Error).message}`)
       setLoading(false)
     }
   }
+
+  const displayError = error ?? initError
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4">
@@ -46,19 +52,17 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {error && (
-            <div className="text-sm text-destructive bg-destructive/10 rounded-2xl px-4 py-3">
-              {error}
+          {displayError && (
+            <div className="text-sm text-destructive bg-destructive/10 rounded-2xl px-4 py-3 break-words">
+              {displayError}
             </div>
           )}
 
-          {/* Microsoft sign-in button — follows MS branding */}
           <button
             onClick={handleLogin}
             disabled={loading}
             className="w-full flex items-center gap-3 px-4 py-3 bg-[#2F2F2F] hover:bg-[#1a1a1a] text-white rounded-xl text-sm font-medium transition-all duration-150 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {/* Microsoft logo SVG */}
             <svg width="20" height="20" viewBox="0 0 21 21" xmlns="http://www.w3.org/2000/svg">
               <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
               <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
