@@ -10,8 +10,10 @@
     "vercel:dev": "vercel dev"
   },
   "dependencies": {
+    "@azure/msal-browser": "^5.10.1",
     "clsx": "^2.1.1",
     "framer-motion": "^12.38.0",
+    "jose": "^6.2.3",
     "lucide-react": "^1.16.0",
     "pdfjs-dist": "4.9.155",
     "radix-ui": "^1.4.3",

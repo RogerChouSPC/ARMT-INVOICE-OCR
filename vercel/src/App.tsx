@@ -1,4 +1,6 @@
 import { useState, useCallback } from 'react'
+import { useAuth } from '@/auth/AuthProvider'
+import LoginPage from '@/components/LoginPage'
 import Header from '@/components/Header'
 import UploadZone from '@/components/UploadZone'
 import ProcessingStatus from '@/components/ProcessingStatus'
@@ -13,10 +15,23 @@ import { EMPTY_ROW } from '@/types/invoice'
 type Tab = 'ocr' | 'customer-master'
 
 export default function App() {
+  const { user, loading, logout, getToken } = useAuth()
   const [activeTab, setActiveTab]       = useState<Tab>('ocr')
   const [statuses, setStatuses]         = useState<FileProcessingStatus[]>([])
   const [rows, setRows]                 = useState<InvoiceRow[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <svg viewBox="0 0 24 24" className="w-6 h-6 fill-primary animate-spin-slow">
+          <path d="M12 4V2C6.48 2 2 6.48 2 12h2c0-4.42 3.58-8 8-8z" />
+        </svg>
+      </div>
+    )
+  }
+
+  if (!user) return <LoginPage />
 
   const updateStatus = useCallback(
     (idx: number, patch: Partial<FileProcessingStatus>) =>
@@ -40,9 +55,10 @@ export default function App() {
 
         if (isDigital) {
           updateStatus(i, { state: 'extracting', progress: 50 })
+          const token = await getToken()
           const res = await fetch('/api/extract', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
             body: JSON.stringify({ text: pdfText, filename: file.name, customerMaster }),
           })
           if (!res.ok) {
@@ -58,9 +74,10 @@ export default function App() {
           })
           const ocrTexts: string[] = []
           for (let p = 0; p < pages.length; p++) {
+            const ocrToken = await getToken()
             const ocrRes = await fetch('/api/ocr', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json', ...(ocrToken ? { Authorization: `Bearer ${ocrToken}` } : {}) },
               body: JSON.stringify({ image: pages[p].base64 }),
             })
             if (!ocrRes.ok) {
@@ -72,9 +89,10 @@ export default function App() {
             updateStatus(i, { progress: 60 + ((p + 1) / pages.length) * 20 })
           }
           updateStatus(i, { state: 'extracting', progress: 80 })
+          const extractToken = await getToken()
           const extractRes = await fetch('/api/extract', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...(extractToken ? { Authorization: `Bearer ${extractToken}` } : {}) },
             body: JSON.stringify({ text: ocrTexts.join('\n\n--- PAGE BREAK ---\n\n'), filename: file.name, customerMaster }),
           })
           if (!extractRes.ok) {
@@ -120,7 +138,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <Header rowCount={rows.length} activeTab={activeTab} onTabChange={setActiveTab} />
+      <Header rowCount={rows.length} activeTab={activeTab} onTabChange={setActiveTab} user={user} onLogout={logout} />
 
       {activeTab === 'customer-master' && (
         <main className="flex-1 w-full px-6 py-8">
