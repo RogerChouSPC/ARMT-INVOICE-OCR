@@ -17,20 +17,27 @@ interface AuthCtx {
   getToken: () => Promise<string | null>
 }
 
-const msalInstance = new PublicClientApplication(msalConfig)
+// Clear stale MSAL state from localStorage to prevent cache/state mismatch errors
+function clearMsalCache() {
+  Object.keys(localStorage)
+    .filter(k => k.startsWith('msal.'))
+    .forEach(k => localStorage.removeItem(k))
+}
+
 const AuthContext = createContext<AuthCtx | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser]     = useState<AuthUser | null>(null)
+  const [user, setUser]       = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError]   = useState<string | null>(null)
+  const [error, setError]     = useState<string | null>(null)
 
   useEffect(() => {
     const init = async () => {
       try {
-        await msalInstance.initialize()
+        const instance = new PublicClientApplication(msalConfig)
+        await instance.initialize()
 
-        const result = await msalInstance.handleRedirectPromise()
+        const result = await instance.handleRedirectPromise()
 
         if (result?.account) {
           setUser({
@@ -39,7 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             account: result.account,
           })
         } else {
-          const accounts = msalInstance.getAllAccounts()
+          const accounts = instance.getAllAccounts()
           if (accounts.length > 0) {
             setUser({
               name:    accounts[0].name ?? accounts[0].username,
@@ -49,8 +56,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
       } catch (e) {
-        console.error('MSAL init error:', e)
-        setError(`Auth error: ${(e as Error).message}`)
+        // Clear stale cache so the next login attempt starts fresh
+        clearMsalCache()
+        const msg = (e as Error).message ?? String(e)
+        console.error('MSAL init error:', msg)
+        setError(`Sign-in error: ${msg}`)
       } finally {
         setLoading(false)
       }
@@ -60,27 +70,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const login = async () => {
-    await msalInstance.loginRedirect(loginRequest)
+    // Always start with a clean slate to avoid interaction_in_progress / cache errors
+    clearMsalCache()
+    const instance = new PublicClientApplication(msalConfig)
+    await instance.initialize()
+    await instance.loginRedirect(loginRequest)
   }
 
   const logout = () => {
-    msalInstance.logoutRedirect({
-      account: user?.account,
-      postLogoutRedirectUri: window.location.origin,
+    const instance = new PublicClientApplication(msalConfig)
+    instance.initialize().then(() => {
+      instance.logoutRedirect({
+        postLogoutRedirectUri: window.location.origin,
+      })
     })
   }
 
   const getToken = async (): Promise<string | null> => {
     if (!user) return null
     try {
-      const result = await msalInstance.acquireTokenSilent({
+      const instance = new PublicClientApplication(msalConfig)
+      await instance.initialize()
+      const result = await instance.acquireTokenSilent({
         ...loginRequest,
         account: user.account,
       })
       return result.accessToken
     } catch (e) {
       if (e instanceof InteractionRequiredAuthError) {
-        await msalInstance.acquireTokenRedirect({ ...loginRequest, account: user.account })
+        const instance = new PublicClientApplication(msalConfig)
+        await instance.initialize()
+        await instance.acquireTokenRedirect({ ...loginRequest, account: user.account })
       }
       return null
     }

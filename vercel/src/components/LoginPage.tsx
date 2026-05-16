@@ -22,6 +22,15 @@ export default function LoginPage({ initError }: Props) {
     }
   }
 
+  const handleClearAndRetry = () => {
+    // Clear all MSAL and app storage then reload for a completely fresh start
+    Object.keys(localStorage).forEach(k => {
+      if (k.startsWith('msal.') || k.startsWith('armt_')) localStorage.removeItem(k)
+    })
+    sessionStorage.clear()
+    window.location.reload()
+  }
+
   const displayError = error ?? initError
 
   return (
@@ -53,8 +62,16 @@ export default function LoginPage({ initError }: Props) {
           </div>
 
           {displayError && (
-            <div className="text-sm text-destructive bg-destructive/10 rounded-2xl px-4 py-3 break-words">
-              {displayError}
+            <div className="flex flex-col gap-2">
+              <div className="text-sm text-destructive bg-destructive/10 rounded-2xl px-4 py-3 break-words">
+                {displayError}
+              </div>
+              <button
+                onClick={handleClearAndRetry}
+                className="text-xs text-muted-foreground underline underline-offset-2 self-start pl-1"
+              >
+                Clear session and try again
+              </button>
             </div>
           )}
 
