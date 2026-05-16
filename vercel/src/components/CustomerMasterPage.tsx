@@ -500,13 +500,30 @@ export default function CustomerMasterPage() {
                       <div className="min-w-0 flex-1">
                         <div className="text-xs font-medium text-gray-700 truncate">{v.label}</div>
                         <div className="text-[11px] text-gray-400 mt-0.5">{fmtDate(v.timestamp)}</div>
-                        <div className="flex gap-2 mt-1 flex-wrap">
-                          {v.snapshot?.length > 0 && <span className="text-[11px] text-gray-500">{v.snapshot.length} rows</span>}
-                          {v.added > 0   && <span className="text-[11px] text-google-green">+{v.added}</span>}
-                          {v.deleted > 0 && <span className="text-[11px] text-google-red">-{v.deleted}</span>}
-                          {v.modified > 0 && <span className="text-[11px] text-yellow-600">~{v.modified}</span>}
-                          {v.added === 0 && v.deleted === 0 && v.modified === 0 && (!v.snapshot || v.snapshot.length === 0) &&
-                            <span className="text-[11px] text-gray-400">no changes</span>}
+                        <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                          {v.snapshot?.length > 0 && (
+                            <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">
+                              {v.snapshot.length} rows total
+                            </span>
+                          )}
+                          {v.added > 0 && (
+                            <span className="text-[10px] bg-green-50 text-green-700 px-1.5 py-0.5 rounded-full">
+                              +{v.added} added
+                            </span>
+                          )}
+                          {v.deleted > 0 && (
+                            <span className="text-[10px] bg-red-50 text-red-600 px-1.5 py-0.5 rounded-full">
+                              -{v.deleted} deleted
+                            </span>
+                          )}
+                          {v.modified > 0 && (
+                            <span className="text-[10px] bg-yellow-50 text-yellow-700 px-1.5 py-0.5 rounded-full">
+                              {v.modified} edited
+                            </span>
+                          )}
+                          {v.added === 0 && v.deleted === 0 && v.modified === 0 && (!v.snapshot || v.snapshot.length === 0) && (
+                            <span className="text-[10px] text-gray-400">no changes recorded</span>
+                          )}
                         </div>
                       </div>
                       <button
