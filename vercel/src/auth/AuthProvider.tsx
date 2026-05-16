@@ -25,39 +25,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     msalInstance.initialize().then(async () => {
-      // Handle redirect callback if returning from login
-      await msalInstance.handleRedirectPromise().catch(() => null)
+      // Process the redirect response if returning from Microsoft login
+      const result = await msalInstance.handleRedirectPromise().catch(() => null)
 
-      const accounts = msalInstance.getAllAccounts()
-      if (accounts.length > 0) {
-        const account = accounts[0]
+      if (result?.account) {
         setUser({
-          name:    account.name ?? account.username,
-          email:   account.username,
-          account,
+          name:  result.account.name ?? result.account.username,
+          email: result.account.username,
+          account: result.account,
         })
+      } else {
+        const accounts = msalInstance.getAllAccounts()
+        if (accounts.length > 0) {
+          setUser({
+            name:    accounts[0].name ?? accounts[0].username,
+            email:   accounts[0].username,
+            account: accounts[0],
+          })
+        }
       }
       setLoading(false)
     })
   }, [])
 
+  // Full-page redirect to Microsoft — no popup, works in all browsers
   const login = async () => {
-    try {
-      const result = await msalInstance.loginPopup(loginRequest)
-      setUser({
-        name:    result.account.name ?? result.account.username,
-        email:   result.account.username,
-        account: result.account,
-      })
-    } catch (e) {
-      console.error('Login failed', e)
-      throw e
-    }
+    await msalInstance.loginRedirect(loginRequest)
   }
 
   const logout = () => {
-    msalInstance.logoutPopup({ account: user?.account })
-    setUser(null)
+    msalInstance.logoutRedirect({ account: user?.account, postLogoutRedirectUri: window.location.origin })
   }
 
   const getToken = async (): Promise<string | null> => {
@@ -70,8 +67,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return result.accessToken
     } catch (e) {
       if (e instanceof InteractionRequiredAuthError) {
-        const result = await msalInstance.acquireTokenPopup({ ...loginRequest, account: user.account })
-        return result.accessToken
+        // Silent failed — do a redirect to refresh token
+        await msalInstance.acquireTokenRedirect({ ...loginRequest, account: user.account })
       }
       return null
     }

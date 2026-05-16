@@ -11,10 +11,9 @@ export default function LoginPage() {
     setLoading(true)
     setError(null)
     try {
-      await login()
+      await login() // triggers full-page redirect — code below won't run
     } catch {
-      setError('Sign-in was cancelled or failed. Please try again.')
-    } finally {
+      setError('Sign-in failed. Please try again.')
       setLoading(false)
     }
   }
@@ -66,7 +65,7 @@ export default function LoginPage() {
               <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
               <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
             </svg>
-            {loading ? 'Opening Microsoft login…' : 'Sign in with Microsoft'}
+            {loading ? 'Redirecting to Microsoft…' : 'Sign in with Microsoft'}
           </button>
 
           <p className="text-xs text-muted-foreground text-center">
