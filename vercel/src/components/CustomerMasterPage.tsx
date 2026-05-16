@@ -206,6 +206,30 @@ export default function CustomerMasterPage() {
     }
   }, [rows, editCell, editValue, history])
 
+  // ── restore to factory default (SEED data) ───────────────────────────────
+  const restoreToDefault = useCallback(() => {
+    const seedRows = seedWithIds()
+    const prevRows = lsGetRows() || []
+    const changes = diff(prevRows, seedRows)
+    const version: Version = {
+      id: Date.now().toString(),
+      timestamp: new Date().toISOString(),
+      label: 'Restored to default',
+      added:    changes.filter(c => c.type === 'add').length,
+      deleted:  changes.filter(c => c.type === 'delete').length,
+      modified: changes.filter(c => c.type === 'edit').length,
+      changes,
+      snapshot: prevRows.length > 0 ? prevRows : seedRows,
+    }
+    const newHistory = [version, ...history].slice(0, 50)
+    localStorage.setItem(LS_ROWS, JSON.stringify(seedRows))
+    localStorage.setItem(LS_HISTORY, JSON.stringify(newHistory))
+    setRows(seedRows)
+    setHistory(newHistory)
+    setDirty(false)
+    showToast(`Restored to default (${seedRows.length} rows)`)
+  }, [history])
+
   // ── restore from version ──────────────────────────────────────────────────
   const restore = useCallback((id: string) => {
     const version = history.find(v => v.id === id)
@@ -445,11 +469,23 @@ export default function CustomerMasterPage() {
         {/* ── History Panel ─────────────────────────────────────────────────── */}
         {showHistory && (
           <div className="card w-80 shrink-0 flex flex-col animate-slide-up">
-            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-2">
               <span className="text-sm font-medium text-gray-700">Version History</span>
-              <button onClick={() => setShowHistory(false)} className="text-gray-400 hover:text-gray-600">
-                <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" /></svg>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={restoreToDefault}
+                  title="Restore to original default data"
+                  className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-full border border-gray-200 text-gray-500 hover:text-primary hover:border-primary transition-colors"
+                >
+                  <svg viewBox="0 0 24 24" className="w-3 h-3 fill-current">
+                    <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
+                  </svg>
+                  Default
+                </button>
+                <button onClick={() => setShowHistory(false)} className="text-gray-400 hover:text-gray-600">
+                  <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" /></svg>
+                </button>
+              </div>
             </div>
             {history.length === 0 ? (
               <p className="px-4 py-6 text-xs text-gray-400 text-center">No saved versions yet</p>
