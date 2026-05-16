@@ -23,10 +23,9 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <svg viewBox="0 0 24 24" className="w-6 h-6 fill-primary animate-spin-slow">
-          <path d="M12 4V2C6.48 2 2 6.48 2 12h2c0-4.42 3.58-8 8-8z" />
-        </svg>
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-3">
+        <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+        <p className="text-sm text-muted-foreground">Signing in…</p>
       </div>
     )
   }

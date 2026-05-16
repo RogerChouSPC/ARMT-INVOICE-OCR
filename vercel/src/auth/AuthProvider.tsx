@@ -17,11 +17,16 @@ interface AuthCtx {
   getToken: () => Promise<string | null>
 }
 
-// Clear stale MSAL state from localStorage to prevent cache/state mismatch errors
-function clearMsalCache() {
-  Object.keys(localStorage)
-    .filter(k => k.startsWith('msal.'))
-    .forEach(k => localStorage.removeItem(k))
+// Single shared instance — must not be re-created (token cache lives in memory here)
+const msalInstance = new PublicClientApplication(msalConfig)
+
+// Clear only MSAL interaction/request state; leave token/account cache intact
+function clearInteractionState() {
+  for (const key of Object.keys(localStorage)) {
+    if (key.includes('.interaction.') || key.includes('.request.params') || key.includes('.nonce.')) {
+      localStorage.removeItem(key)
+    }
+  }
 }
 
 const AuthContext = createContext<AuthCtx | null>(null)
@@ -34,10 +39,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const init = async () => {
       try {
-        const instance = new PublicClientApplication(msalConfig)
-        await instance.initialize()
-
-        const result = await instance.handleRedirectPromise()
+        await msalInstance.initialize()
+        const result = await msalInstance.handleRedirectPromise()
 
         if (result?.account) {
           setUser({
@@ -46,7 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             account: result.account,
           })
         } else {
-          const accounts = instance.getAllAccounts()
+          const accounts = msalInstance.getAllAccounts()
           if (accounts.length > 0) {
             setUser({
               name:    accounts[0].name ?? accounts[0].username,
@@ -56,8 +59,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
       } catch (e) {
-        // Clear stale cache so the next login attempt starts fresh
-        clearMsalCache()
+        // Clear stale interaction state so the next login attempt starts fresh
+        clearInteractionState()
         const msg = (e as Error).message ?? String(e)
         console.error('MSAL init error:', msg)
         setError(`Sign-in error: ${msg}`)
@@ -70,37 +73,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const login = async () => {
-    // Always start with a clean slate to avoid interaction_in_progress / cache errors
-    clearMsalCache()
-    const instance = new PublicClientApplication(msalConfig)
-    await instance.initialize()
-    await instance.loginRedirect(loginRequest)
+    // Clear stale interaction state to prevent interaction_in_progress errors
+    clearInteractionState()
+    await msalInstance.loginRedirect(loginRequest)
   }
 
   const logout = () => {
-    const instance = new PublicClientApplication(msalConfig)
-    instance.initialize().then(() => {
-      instance.logoutRedirect({
-        postLogoutRedirectUri: window.location.origin,
-      })
+    msalInstance.logoutRedirect({
+      account: user?.account,
+      postLogoutRedirectUri: window.location.origin,
     })
   }
 
   const getToken = async (): Promise<string | null> => {
     if (!user) return null
     try {
-      const instance = new PublicClientApplication(msalConfig)
-      await instance.initialize()
-      const result = await instance.acquireTokenSilent({
+      const result = await msalInstance.acquireTokenSilent({
         ...loginRequest,
         account: user.account,
       })
       return result.accessToken
     } catch (e) {
       if (e instanceof InteractionRequiredAuthError) {
-        const instance = new PublicClientApplication(msalConfig)
-        await instance.initialize()
-        await instance.acquireTokenRedirect({ ...loginRequest, account: user.account })
+        await msalInstance.acquireTokenRedirect({ ...loginRequest, account: user.account })
       }
       return null
     }
