@@ -102,9 +102,15 @@ function FileIcon({ state }: { state: string }) {
     </svg>
   )
   if (state !== 'idle') return (
-    <svg viewBox="0 0 24 24" className="w-4 h-4 fill-primary animate-spin-slow shrink-0">
-      <path d="M12 4V2C6.48 2 2 6.48 2 12h2c0-4.42 3.58-8 8-8z" />
-    </svg>
+    <div className="flex items-end gap-[1.5px] h-4 shrink-0">
+      {[0, 1, 2, 3, 4].map((i) => (
+        <div
+          key={i}
+          className="bg-primary rounded-t-sm origin-bottom animate-bar-loader"
+          style={{ width: '2.5px', height: '14px', animationDelay: `${(i + 1) * 0.12}s` }}
+        />
+      ))}
+    </div>
   )
   return (
     <svg viewBox="0 0 24 24" className="w-4 h-4 fill-muted-foreground shrink-0">
