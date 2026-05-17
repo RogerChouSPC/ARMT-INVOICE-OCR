@@ -131,7 +131,7 @@ export default function App() {
   const allDone = statuses.length > 0 && statuses.every((s) => s.state === 'done' || s.state === 'error')
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="min-h-screen flex flex-col relative">
       <HeroBackground />
       <Header rowCount={rows.length} activeTab={activeTab} onTabChange={setActiveTab} user={user} onLogout={logout} />
 
