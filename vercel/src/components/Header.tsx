@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { Sparkles } from 'lucide-react'
+import { Sparkles, LogOut } from 'lucide-react'
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -15,6 +15,8 @@ interface HeaderProps {
   rowCount: number
   activeTab: Tab
   onTabChange: (tab: Tab) => void
+  user: { name: string; email: string } | null
+  onLogout: () => void
 }
 
 const TAB_LABELS: Record<Tab, string> = {
@@ -22,7 +24,7 @@ const TAB_LABELS: Record<Tab, string> = {
   'customer-master': 'Customer Master',
 }
 
-export default function Header({ rowCount, activeTab, onTabChange }: HeaderProps) {
+export default function Header({ rowCount, activeTab, onTabChange, user, onLogout }: HeaderProps) {
   return (
     <header className="sticky top-0 z-20 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border">
       {/* Main nav row */}
@@ -56,15 +58,37 @@ export default function Header({ rowCount, activeTab, onTabChange }: HeaderProps
           </nav>
         </div>
 
-        {activeTab === 'ocr' && rowCount > 0 && (
-          <motion.span
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="text-xs bg-muted text-muted-foreground px-3 py-1 rounded-3xl font-medium"
-          >
-            {rowCount} {rowCount === 1 ? 'row' : 'rows'} extracted
-          </motion.span>
-        )}
+        <div className="flex items-center gap-3">
+          {activeTab === 'ocr' && rowCount > 0 && (
+            <motion.span
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="text-xs bg-muted text-muted-foreground px-3 py-1 rounded-3xl font-medium"
+            >
+              {rowCount} {rowCount === 1 ? 'row' : 'rows'} extracted
+            </motion.span>
+          )}
+
+          {/* User info + logout */}
+          {user && (
+            <div className="flex items-center gap-2 pl-3 border-l border-border">
+              <div className="text-right hidden sm:block">
+                <p className="text-xs font-medium text-foreground leading-tight">{user.name}</p>
+                <p className="text-[11px] text-muted-foreground leading-tight">{user.email}</p>
+              </div>
+              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm">
+                {user.name.charAt(0).toUpperCase()}
+              </div>
+              <button
+                onClick={onLogout}
+                title="Sign out"
+                className="h-8 w-8 flex items-center justify-center rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Breadcrumb row */}

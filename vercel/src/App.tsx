@@ -1,4 +1,6 @@
 import { useState, useCallback } from 'react'
+import { useAuth } from '@/auth/AuthProvider'
+import LoginPage from '@/components/LoginPage'
 import Header from '@/components/Header'
 import UploadZone from '@/components/UploadZone'
 import ProcessingStatus from '@/components/ProcessingStatus'
@@ -13,11 +15,13 @@ import { EMPTY_ROW } from '@/types/invoice'
 type Tab = 'ocr' | 'customer-master'
 
 export default function App() {
+  const { user, loading, error, logout, getToken } = useAuth()
   const [activeTab, setActiveTab]       = useState<Tab>('ocr')
   const [statuses, setStatuses]         = useState<FileProcessingStatus[]>([])
   const [rows, setRows]                 = useState<InvoiceRow[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
 
+  // All hooks must be declared before any conditional return
   const updateStatus = useCallback(
     (idx: number, patch: Partial<FileProcessingStatus>) =>
       setStatuses((prev) => prev.map((s, i) => (i === idx ? { ...s, ...patch } : s))),
@@ -40,9 +44,10 @@ export default function App() {
 
         if (isDigital) {
           updateStatus(i, { state: 'extracting', progress: 50 })
+          const token = await getToken()
           const res = await fetch('/api/extract', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
             body: JSON.stringify({ text: pdfText, filename: file.name, customerMaster }),
           })
           if (!res.ok) {
@@ -58,9 +63,10 @@ export default function App() {
           })
           const ocrTexts: string[] = []
           for (let p = 0; p < pages.length; p++) {
+            const ocrToken = await getToken()
             const ocrRes = await fetch('/api/ocr', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': 'application/json', ...(ocrToken ? { Authorization: `Bearer ${ocrToken}` } : {}) },
               body: JSON.stringify({ image: pages[p].base64 }),
             })
             if (!ocrRes.ok) {
@@ -72,9 +78,10 @@ export default function App() {
             updateStatus(i, { progress: 60 + ((p + 1) / pages.length) * 20 })
           }
           updateStatus(i, { state: 'extracting', progress: 80 })
+          const extractToken = await getToken()
           const extractRes = await fetch('/api/extract', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...(extractToken ? { Authorization: `Bearer ${extractToken}` } : {}) },
             body: JSON.stringify({ text: ocrTexts.join('\n\n--- PAGE BREAK ---\n\n'), filename: file.name, customerMaster }),
           })
           if (!extractRes.ok) {
@@ -99,9 +106,7 @@ export default function App() {
 
     setRows((prev) => [...prev, ...newRows.map((r, i) => ({ ...r, seq: prev.length + i + 1 }))])
     setIsProcessing(false)
-  }, [updateStatus])
-
-  const clearAll = () => { setRows([]); setStatuses([]) }
+  }, [updateStatus, getToken])
 
   const refreshCustomerMapping = useCallback(() => {
     const cm = getCustomerMasterRows()
@@ -116,11 +121,15 @@ export default function App() {
     }))
   }, [])
 
+  if (!user) return <LoginPage initError={error} isLoading={loading} />
+
+  const clearAll = () => { setRows([]); setStatuses([]) }
+
   const allDone = statuses.length > 0 && statuses.every((s) => s.state === 'done' || s.state === 'error')
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <Header rowCount={rows.length} activeTab={activeTab} onTabChange={setActiveTab} />
+      <Header rowCount={rows.length} activeTab={activeTab} onTabChange={setActiveTab} user={user} onLogout={logout} />
 
       {activeTab === 'customer-master' && (
         <main className="flex-1 w-full px-6 py-8">
