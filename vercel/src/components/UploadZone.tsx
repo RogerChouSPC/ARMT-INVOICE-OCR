@@ -88,11 +88,11 @@ export default function UploadZone({ onFiles, disabled }: UploadZoneProps) {
       </div>
 
       <div className="text-center">
-        <p className="text-lg font-semibold text-foreground">
-          {dragging ? 'Drop PDFs or folders here' : 'Upload Invoice PDFs'}
+        <p className="text-base font-semibold text-foreground">
+          {dragging ? 'Drop PDFs or folders here' : 'Upload invoice PDFs'}
         </p>
         <p className="text-sm text-muted-foreground mt-1">
-          Drag & drop files or folders ·{' '}
+          Drag & drop or{' '}
           <span className="text-primary font-medium">browse files</span>
           {' · '}
           <label className="text-primary font-medium cursor-pointer hover:underline" onClick={e => e.stopPropagation()}>
@@ -107,18 +107,6 @@ export default function UploadZone({ onFiles, disabled }: UploadZoneProps) {
             />
           </label>
         </p>
-        <p className="text-xs text-muted-foreground/60 mt-2">PDF files only · Thai language invoices · Subfolders supported</p>
-      </div>
-
-      <div className="flex items-center gap-4 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1">
-          <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
-          Google Vision OCR
-        </span>
-        <span className="flex items-center gap-1">
-          <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
-          22-column Excel output
-        </span>
       </div>
     </div>
   )

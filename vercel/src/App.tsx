@@ -139,11 +139,31 @@ export default function App() {
       )}
 
       {activeTab === 'ocr' && (
-        <main className="flex-1 w-full px-6 py-8 flex flex-col gap-6">
+        <main className="flex-1 max-w-3xl mx-auto w-full px-6 flex flex-col gap-6">
           {rows.length === 0 && statuses.length === 0 && (
-            <div className="text-center py-4 animate-fade-in">
-              <h2 className="text-2xl font-semibold text-foreground">Extract Thai Invoice Data</h2>
-              <p className="text-sm text-muted-foreground mt-1">Powered by Google Gemini · 22-column Excel output</p>
+            <div className="text-center pt-20 pb-8 animate-fade-in">
+              <h2 className="text-5xl font-bold text-foreground tracking-tight leading-tight">
+                Extract invoices<br />in seconds
+              </h2>
+              <p className="text-lg text-muted-foreground mt-4">
+                Drop in Thai PDFs. Get structured data back.
+              </p>
+            </div>
+          )}
+
+          {rows.length > 0 && (
+            <div className="pt-8 pb-2 flex items-center justify-between animate-fade-in">
+              <span className="text-sm text-muted-foreground">{rows.length} {rows.length === 1 ? 'row' : 'rows'} extracted</span>
+              {allDone && !isProcessing && (
+                <label className="btn-secondary cursor-pointer">
+                  <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
+                    <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+                  </svg>
+                  Add more
+                  <input type="file" accept="application/pdf" multiple className="hidden"
+                    onChange={(e) => e.target.files && processFiles(Array.from(e.target.files))} />
+                </label>
+              )}
             </div>
           )}
 
@@ -156,25 +176,15 @@ export default function App() {
             <>
               <ResultsTable rows={rows} onUpdate={setRows} />
 
-              <div className="flex items-center justify-between">
-                <button className="btn-secondary text-destructive hover:text-destructive hover:border-destructive/50" onClick={clearAll}>
-                  <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
-                    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-                  </svg>
+              <div className="flex items-center justify-between pb-10">
+                <button
+                  className="text-sm text-muted-foreground hover:text-destructive transition-colors"
+                  onClick={clearAll}
+                >
                   Clear all
                 </button>
 
                 <div className="flex items-center gap-3">
-                  {allDone && !isProcessing && (
-                    <label className="btn-secondary cursor-pointer">
-                      <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
-                        <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
-                      </svg>
-                      Add more
-                      <input type="file" accept="application/pdf" multiple className="hidden"
-                        onChange={(e) => e.target.files && processFiles(Array.from(e.target.files))} />
-                    </label>
-                  )}
                   <button className="btn-secondary" onClick={refreshCustomerMapping} disabled={isProcessing}>
                     <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
                       <path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
@@ -193,10 +203,6 @@ export default function App() {
           )}
         </main>
       )}
-
-      <footer className="text-center text-xs text-muted-foreground py-4 border-t border-border">
-        ARMT Invoice OCR · Google Gemini · Thai Language Support
-      </footer>
     </div>
   )
 }
