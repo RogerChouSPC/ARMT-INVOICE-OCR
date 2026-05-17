@@ -83,12 +83,12 @@ export default function LoginPage({ initError, isLoading }: Props) {
                 <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
               </svg>
             )}
-            {signing ? 'Opening Microsoft sign-in…' : isLoading ? 'Please wait…' : 'Sign in with Microsoft'}
+            {signing ? 'Redirecting to Microsoft…' : isLoading ? 'Please wait…' : 'Sign in with Microsoft'}
           </button>
 
           {signing && (
             <p className="text-xs text-muted-foreground text-center">
-              A sign-in window should open. If nothing appears, check if your browser blocked a popup.
+              You will be taken to Microsoft to sign in and redirected back.
             </p>
           )}
 

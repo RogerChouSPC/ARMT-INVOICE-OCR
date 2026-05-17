@@ -21,8 +21,7 @@ export default function App() {
   const [rows, setRows]                 = useState<InvoiceRow[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
 
-  if (!user) return <LoginPage initError={error} isLoading={loading} />
-
+  // All hooks must be declared before any conditional return
   const updateStatus = useCallback(
     (idx: number, patch: Partial<FileProcessingStatus>) =>
       setStatuses((prev) => prev.map((s, i) => (i === idx ? { ...s, ...patch } : s))),
@@ -107,9 +106,7 @@ export default function App() {
 
     setRows((prev) => [...prev, ...newRows.map((r, i) => ({ ...r, seq: prev.length + i + 1 }))])
     setIsProcessing(false)
-  }, [updateStatus])
-
-  const clearAll = () => { setRows([]); setStatuses([]) }
+  }, [updateStatus, getToken])
 
   const refreshCustomerMapping = useCallback(() => {
     const cm = getCustomerMasterRows()
@@ -123,6 +120,10 @@ export default function App() {
       return { ...row, customergroup: best.customergroup, customercode: best.customercode }
     }))
   }, [])
+
+  if (!user) return <LoginPage initError={error} isLoading={loading} />
+
+  const clearAll = () => { setRows([]); setStatuses([]) }
 
   const allDone = statuses.length > 0 && statuses.every((s) => s.state === 'done' || s.state === 'error')
 
