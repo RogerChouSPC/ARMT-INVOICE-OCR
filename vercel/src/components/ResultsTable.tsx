@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { InvoiceRow } from '@/types/invoice'
 import { INVOICE_COLUMNS } from '@/types/invoice'
 
@@ -9,6 +9,14 @@ interface Props {
 
 export default function ResultsTable({ rows, onUpdate }: Props) {
   const [editCell, setEditCell] = useState<{ row: number; col: keyof InvoiceRow } | null>(null)
+  const [fullscreen, setFullscreen] = useState(false)
+
+  useEffect(() => {
+    if (!fullscreen) return
+    const fn = (e: KeyboardEvent) => { if (e.key === 'Escape') setFullscreen(false) }
+    document.addEventListener('keydown', fn)
+    return () => document.removeEventListener('keydown', fn)
+  }, [fullscreen])
 
   if (rows.length === 0) return null
 
@@ -22,16 +30,36 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
   }
 
   return (
-    <div className="card overflow-hidden animate-slide-up">
-      <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+    <div className={fullscreen
+      ? 'fixed inset-0 z-50 bg-background flex flex-col'
+      : 'card overflow-hidden animate-slide-up'
+    }>
+      <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between shrink-0">
         <h2 className="text-sm font-medium text-gray-700">
           Extracted Data
           <span className="ml-2 text-xs text-gray-400 font-normal">— click any cell to edit</span>
         </h2>
-        <span className="text-xs text-gray-500">{rows.length} rows · 22 columns</span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-gray-500">{rows.length} rows · 22 columns</span>
+          <button
+            onClick={() => setFullscreen(v => !v)}
+            title={fullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen'}
+            className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {fullscreen ? (
+              <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
+                <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
+                <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
+              </svg>
+            )}
+          </button>
+        </div>
       </div>
 
-      <div className="table-container">
+      <div className={fullscreen ? 'flex-1 overflow-auto' : 'table-container'}>
         <table className="w-full text-xs border-collapse">
           <thead>
             <tr className="bg-google-blue-light">
