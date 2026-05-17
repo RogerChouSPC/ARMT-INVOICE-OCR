@@ -7,6 +7,7 @@ import ProcessingStatus from '@/components/ProcessingStatus'
 import ResultsTable from '@/components/ResultsTable'
 import TableSkeleton from '@/components/TableSkeleton'
 import CustomerMasterPage, { getCustomerMasterRows } from '@/components/CustomerMasterPage'
+import CustomerCycle from '@/components/CustomerCycle'
 import { extractPdfText } from '@/utils/pdfTextExtractor'
 import { renderPdfPages } from '@/utils/pdfRenderer'
 import { exportToExcel } from '@/utils/excelExporter'
@@ -145,9 +146,9 @@ export default function App() {
               <h2 className="text-6xl font-bold text-foreground tracking-tight leading-[1.1]">
                 Extract invoices<br />in seconds.
               </h2>
-              <p className="text-lg text-muted-foreground mt-5">
-                Drop in Thai PDFs. Get structured Excel data back.
-              </p>
+              <div className="mt-5 flex justify-center">
+                <CustomerCycle />
+              </div>
             </div>
           )}
 
