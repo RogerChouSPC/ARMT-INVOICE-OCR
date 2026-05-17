@@ -30,7 +30,10 @@ export async function extractPdfText(file: File): Promise<PdfTextResult> {
   }
 
   const avgCharsPerPage = totalChars / pdf.numPages
-  const isDigital = avgCharsPerPage > 100
+  const pagesWithText = pageParts.filter(p => p.replace(/\s+/g, '').length > 100).length
+  // Require a majority of pages to have real text — a high average caused by one digital
+  // summary page among several scanned pages (e.g. CP ALL) would otherwise skip OCR.
+  const isDigital = avgCharsPerPage > 100 && pagesWithText > pdf.numPages / 2
 
   const text = pageParts.join('\n\n--- PAGE BREAK ---\n\n')
   return { text, pageCount: pdf.numPages, isDigital }
