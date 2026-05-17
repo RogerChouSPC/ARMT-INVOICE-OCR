@@ -9,9 +9,52 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600&family=Roboto:wght@300;400;500&display=swap" rel="stylesheet" />
+    <style>
+      #pre-react { display:flex; flex-direction:column; align-items:center; justify-content:center;
+                   min-height:100vh; font-family:system-ui,sans-serif; gap:12px; background:#fff; }
+      #pre-react p  { color:#555; font-size:14px; margin:0; }
+      #pre-react a  { color:#0070f3; font-size:12px; cursor:pointer; }
+    </style>
   </head>
   <body>
+    <!-- Shown until React mounts. If JS crashes, users can still clear stuck session state. -->
+    <div id="pre-react">
+      <p>Loading SPC OCR Invoice…</p>
+      <a onclick="(function(){Object.keys(localStorage).filter(function(k){return k.startsWith('msal.')}).forEach(function(k){localStorage.removeItem(k)});sessionStorage.clear();location.reload()})()">
+        Stuck? Click here to clear session and reload
+      </a>
+    </div>
     <div id="root"></div>
+    <script>
+      // Clear stale MSAL interaction state on every fresh page load.
+      // Preserves account/token keys (contain 'login.windows.net' or 'accesstoken')
+      // but removes interaction/request keys that cause hangs.
+      (function() {
+        var hasCode = location.hash.indexOf('code=') !== -1 || location.search.indexOf('code=') !== -1;
+        if (!hasCode) {
+          Object.keys(localStorage).forEach(function(k) {
+            if (k.startsWith('msal.') && (
+              k.indexOf('.interaction.') !== -1 ||
+              k.indexOf('.request.') !== -1 ||
+              k.indexOf('.nonce.') !== -1
+            )) {
+              localStorage.removeItem(k);
+            }
+          });
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // Hide the fallback once React successfully renders something into #root
+      var observer = new MutationObserver(function() {
+        if (document.getElementById('root').childElementCount > 0) {
+          var el = document.getElementById('pre-react');
+          if (el) el.style.display = 'none';
+          observer.disconnect();
+        }
+      });
+      observer.observe(document.getElementById('root'), { childList: true });
+    </script>
   </body>
 </html>
