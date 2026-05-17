@@ -144,13 +144,13 @@ export default function App() {
 
           {rows.length === 0 && statuses.length === 0 && (
             <div className="text-center pt-20 pb-6 max-w-4xl mx-auto w-full animate-fade-in">
-              <h2 className="text-6xl font-bold text-foreground tracking-tight leading-[1.2] whitespace-nowrap">
-                Extract invoices in seconds
+              <h2 className="text-6xl font-bold text-foreground tracking-tight leading-[1.2]">
+                Extract invoices<br />
+                <span className="inline-flex items-center justify-center gap-3">
+                  <span>for</span>
+                  <CustomerCycle />
+                </span>
               </h2>
-              <p className="text-6xl font-bold text-foreground tracking-tight leading-[1.2]">
-                Supported for
-              </p>
-              <CustomerCycle />
             </div>
           )}
 
