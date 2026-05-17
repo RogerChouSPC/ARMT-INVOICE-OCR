@@ -97,8 +97,22 @@ export default function LoginPage({ initError, isLoading }: Props) {
           </p>
         </div>
 
-        <p className="text-center text-xs text-muted-foreground mt-8">
+        <p className="text-center text-xs text-muted-foreground mt-6">
           ARMT Invoice OCR · Confidential internal tool
+        </p>
+
+        {/* Always-visible escape hatch for stuck/corrupt MSAL state */}
+        <p className="text-center mt-3">
+          <button
+            onClick={() => {
+              Object.keys(localStorage).filter(k => k.startsWith('msal.')).forEach(k => localStorage.removeItem(k))
+              sessionStorage.clear()
+              window.location.reload()
+            }}
+            className="text-xs text-muted-foreground/60 hover:text-muted-foreground underline underline-offset-2"
+          >
+            Having trouble? Clear session and reload
+          </button>
         </p>
       </motion.div>
     </div>

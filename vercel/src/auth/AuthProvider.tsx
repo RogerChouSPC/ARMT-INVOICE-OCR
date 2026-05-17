@@ -17,7 +17,19 @@ interface AuthCtx {
   getToken: () => Promise<string | null>
 }
 
-export const msalInstance = new PublicClientApplication(msalConfig)
+function clearMsalStorage() {
+  Object.keys(localStorage).filter(k => k.startsWith('msal.')).forEach(k => localStorage.removeItem(k))
+}
+
+// If the constructor throws due to corrupt localStorage, clear and retry once
+let msalInstance: PublicClientApplication
+try {
+  msalInstance = new PublicClientApplication(msalConfig)
+} catch {
+  clearMsalStorage()
+  msalInstance = new PublicClientApplication(msalConfig)
+}
+export { msalInstance }
 
 function accountToUser(account: AccountInfo): AuthUser {
   return { name: account.name ?? account.username, email: account.username, account }
@@ -26,33 +38,19 @@ function accountToUser(account: AccountInfo): AuthUser {
 const AuthContext = createContext<AuthCtx | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser]       = useState<AuthUser | null>(null)
+  const [user, setUser]     = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError]   = useState<string | null>(null)
 
   useEffect(() => {
     const init = async () => {
       try {
         await msalInstance.initialize()
-
-        // Only call handleRedirectPromise if the URL actually contains an auth code.
-        // On a plain refresh there is nothing to process, so skip it and just read
-        // the account cache directly — this avoids the 3s stall.
-        const hasCode =
-          window.location.hash.includes('code=') ||
-          window.location.search.includes('code=')
-
-        if (hasCode) {
-          const result = await msalInstance.handleRedirectPromise({ navigateToLoginRequestUrl: false })
-          if (result?.account) {
-            setUser(accountToUser(result.account))
-            return
-          }
-        }
-
         const accounts = msalInstance.getAllAccounts()
         if (accounts.length > 0) setUser(accountToUser(accounts[0]))
       } catch (e) {
         console.error('MSAL init error:', e)
+        setError((e as Error).message ?? 'Auth initialisation failed')
       } finally {
         setLoading(false)
       }
@@ -66,12 +64,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (result.account) setUser(accountToUser(result.account))
     } catch (e) {
       const code = (e as BrowserAuthError)?.errorCode ?? ''
-      if (code === 'popup_window_error' || code === 'empty_window_error' || code === 'user_cancelled') {
+      if (code === 'popup_window_error' || code === 'empty_window_error') {
         throw new Error(
-          'The sign-in popup was blocked or closed. ' +
-          'Please allow popups for this site in your browser and try again.'
+          'Popup was blocked. Click the popup-blocked icon in your browser address bar, ' +
+          'allow popups for this site, then try again.'
         )
       }
+      if (code === 'user_cancelled') return   // user closed popup — not an error
       throw e
     }
   }
@@ -100,7 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, error: null, login, logout, getToken }}>
+    <AuthContext.Provider value={{ user, loading, error, login, logout, getToken }}>
       {children}
     </AuthContext.Provider>
   )
