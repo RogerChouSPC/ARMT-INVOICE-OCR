@@ -344,8 +344,8 @@ export default function CustomerMasterPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64 text-gray-500 text-sm">
-        <svg viewBox="0 0 24 24" className="w-5 h-5 fill-google-blue animate-spin-slow mr-2">
+      <div className="flex items-center justify-center h-64 text-muted-foreground text-sm">
+        <svg viewBox="0 0 24 24" className="w-5 h-5 fill-primary animate-spin-slow mr-2">
           <path d="M12 4V2C6.48 2 2 6.48 2 12h2c0-4.42 3.58-8 8-8z" />
         </svg>
         Loading…
@@ -358,10 +358,10 @@ export default function CustomerMasterPage() {
 
       {/* ── Toolbar ────────────────────────────────────────────────────────── */}
       <div className="card px-5 py-3 flex items-center gap-3 flex-wrap">
-        <span className="text-sm font-medium text-gray-700 mr-auto">
+        <span className="text-sm font-medium text-foreground mr-auto">
           Customer Master
-          <span className="ml-2 text-xs text-gray-400 font-normal">{rows.length} rows</span>
-          {dirty && <span className="ml-2 text-xs text-google-blue font-normal">● unsaved</span>}
+          <span className="ml-2 text-xs text-muted-foreground font-normal">{rows.length} rows</span>
+          {dirty && <span className="ml-2 text-xs text-primary font-normal">● unsaved</span>}
         </span>
 
         <label className="btn-secondary cursor-pointer text-xs">
@@ -377,7 +377,7 @@ export default function CustomerMasterPage() {
 
         <button className="btn-secondary text-xs" onClick={() => setShowHistory(v => !v)}>
           <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current"><path d="M13 3a9 9 0 1 0 9 9h-2a7 7 0 1 1-7-7v4l5-5-5-5v4z" /></svg>
-          History {history.length > 0 && <span className="ml-1 bg-google-blue text-white rounded-full px-1.5 py-0 text-[10px]">{history.length}</span>}
+          History {history.length > 0 && <span className="ml-1 bg-primary text-primary-foreground rounded-full px-1.5 py-0 text-[10px]">{history.length}</span>}
         </button>
 
         <button className="btn-primary text-xs" onClick={save} disabled={saving || !dirty}>
@@ -397,19 +397,19 @@ export default function CustomerMasterPage() {
             <table className="w-full text-xs border-collapse">
               <thead>
                 <tr className="bg-google-blue-light">
-                  <th className="px-2 py-2.5 text-left font-medium text-gray-500 border-b border-gray-200 w-8 text-center">#</th>
+                  <th className="px-2 py-2.5 text-left font-medium text-muted-foreground border-b border-border w-8 text-center">#</th>
                   {COLS.map(c => (
-                    <th key={c.key as string} className="px-3 py-2.5 text-left font-medium text-gray-600 border-b border-gray-200 whitespace-nowrap" style={{ minWidth: c.width }}>
+                    <th key={c.key as string} className="px-3 py-2.5 text-left font-medium text-muted-foreground border-b border-border whitespace-nowrap" style={{ minWidth: c.width }}>
                       {c.label}
                     </th>
                   ))}
-                  <th className="px-2 py-2.5 border-b border-gray-200 w-8" />
+                  <th className="px-2 py-2.5 border-b border-border w-8" />
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row, ri) => (
-                  <tr key={row.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors group">
-                    <td className="px-2 py-1 text-center text-gray-400">{ri + 1}</td>
+                  <tr key={row.id} className="border-b border-border hover:bg-muted/40 transition-colors group">
+                    <td className="px-2 py-1 text-center text-muted-foreground/60">{ri + 1}</td>
                     {COLS.map(c => {
                       const isEditing = editCell?.row === ri && editCell?.col === c.key
                       const val = row[c.key] as string
@@ -434,7 +434,7 @@ export default function CustomerMasterPage() {
                             />
                           ) : (
                             <span
-                              className={`block truncate px-1 py-0.5 rounded ${val ? 'text-gray-800' : 'text-gray-300 italic'}`}
+                              className={`block truncate px-1 py-0.5 rounded ${val ? 'text-foreground' : 'text-muted-foreground/40 italic'}`}
                               style={{ maxWidth: c.width - 16 }}
                               title={val}
                             >
@@ -447,7 +447,7 @@ export default function CustomerMasterPage() {
                     <td className="px-2 py-1 text-center">
                       <button
                         onClick={() => deleteRow(ri)}
-                        className="w-5 h-5 rounded text-gray-300 hover:text-google-red hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100 flex items-center justify-center"
+                        className="w-5 h-5 rounded text-muted-foreground/30 hover:text-destructive hover:bg-destructive/10 transition-colors opacity-0 group-hover:opacity-100 flex items-center justify-center"
                         title="Delete row"
                       >
                         <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" /></svg>
@@ -458,8 +458,8 @@ export default function CustomerMasterPage() {
               </tbody>
             </table>
           </div>
-          <div className="px-4 py-2.5 border-t border-gray-100">
-            <button className="flex items-center gap-1.5 text-xs text-google-blue hover:text-google-blue-dark transition-colors" onClick={addRow}>
+          <div className="px-4 py-2.5 border-t border-border">
+            <button className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/70 transition-colors" onClick={addRow}>
               <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" /></svg>
               Add row
             </button>
@@ -469,60 +469,60 @@ export default function CustomerMasterPage() {
         {/* ── History Panel ─────────────────────────────────────────────────── */}
         {showHistory && (
           <div className="card w-80 shrink-0 flex flex-col animate-slide-up">
-            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-2">
-              <span className="text-sm font-medium text-gray-700">Version History</span>
+            <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-2">
+              <span className="text-sm font-medium text-foreground">Version History</span>
               <div className="flex items-center gap-2">
                 <button
                   onClick={restoreToDefault}
                   title="Restore to original default data"
-                  className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-full border border-gray-200 text-gray-500 hover:text-primary hover:border-primary transition-colors"
+                  className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-full border border-border text-muted-foreground hover:text-primary hover:border-primary transition-colors"
                 >
                   <svg viewBox="0 0 24 24" className="w-3 h-3 fill-current">
                     <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
                   </svg>
                   Default
                 </button>
-                <button onClick={() => setShowHistory(false)} className="text-gray-400 hover:text-gray-600">
+                <button onClick={() => setShowHistory(false)} className="text-muted-foreground hover:text-foreground">
                   <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" /></svg>
                 </button>
               </div>
             </div>
             {history.length === 0 ? (
-              <p className="px-4 py-6 text-xs text-gray-400 text-center">No saved versions yet</p>
+              <p className="px-4 py-6 text-xs text-muted-foreground text-center">No saved versions yet</p>
             ) : (
               <div className="overflow-y-auto max-h-[calc(100vh-280px)]">
                 {history.map(v => (
-                  <div key={v.id} className="border-b border-gray-100 last:border-0">
+                  <div key={v.id} className="border-b border-border last:border-0">
                     <div
-                      className="px-4 py-3 hover:bg-gray-50 cursor-pointer flex items-start justify-between gap-2"
+                      className="px-4 py-3 hover:bg-muted/40 cursor-pointer flex items-start justify-between gap-2"
                       onClick={() => setExpandedVersion(expandedVersion === v.id ? null : v.id)}
                     >
                       <div className="min-w-0 flex-1">
-                        <div className="text-xs font-medium text-gray-700 truncate">{v.label}</div>
-                        <div className="text-[11px] text-gray-400 mt-0.5">{fmtDate(v.timestamp)}</div>
+                        <div className="text-xs font-medium text-foreground truncate">{v.label}</div>
+                        <div className="text-[11px] text-muted-foreground mt-0.5">{fmtDate(v.timestamp)}</div>
                         <div className="flex gap-1.5 mt-1.5 flex-wrap">
                           {v.snapshot?.length > 0 && (
-                            <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">
+                            <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">
                               {v.snapshot.length} rows total
                             </span>
                           )}
                           {v.added > 0 && (
-                            <span className="text-[10px] bg-green-50 text-green-700 px-1.5 py-0.5 rounded-full">
+                            <span className="text-[10px] bg-green-50 dark:bg-green-950/60 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded-full">
                               +{v.added} added
                             </span>
                           )}
                           {v.deleted > 0 && (
-                            <span className="text-[10px] bg-red-50 text-red-600 px-1.5 py-0.5 rounded-full">
+                            <span className="text-[10px] bg-red-50 dark:bg-red-950/60 text-red-600 dark:text-red-400 px-1.5 py-0.5 rounded-full">
                               -{v.deleted} deleted
                             </span>
                           )}
                           {v.modified > 0 && (
-                            <span className="text-[10px] bg-yellow-50 text-yellow-700 px-1.5 py-0.5 rounded-full">
+                            <span className="text-[10px] bg-yellow-50 dark:bg-yellow-950/60 text-yellow-700 dark:text-yellow-400 px-1.5 py-0.5 rounded-full">
                               {v.modified} edited
                             </span>
                           )}
                           {v.added === 0 && v.deleted === 0 && v.modified === 0 && (!v.snapshot || v.snapshot.length === 0) && (
-                            <span className="text-[10px] text-gray-400">no changes recorded</span>
+                            <span className="text-[10px] text-muted-foreground">no changes recorded</span>
                           )}
                         </div>
                       </div>
@@ -530,7 +530,7 @@ export default function CustomerMasterPage() {
                         onClick={e => { e.stopPropagation(); restore(v.id) }}
                         disabled={!v.snapshot || v.snapshot.length === 0}
                         title={v.snapshot?.length > 0 ? `Undo this save → restore ${v.snapshot.length} rows` : 'No snapshot available'}
-                        className="shrink-0 text-[11px] text-google-blue hover:underline disabled:text-gray-300 disabled:cursor-not-allowed"
+                        className="shrink-0 text-[11px] text-primary hover:underline disabled:text-muted-foreground/30 disabled:cursor-not-allowed"
                       >
                         Undo
                       </button>
@@ -539,9 +539,9 @@ export default function CustomerMasterPage() {
                       <div className="px-4 pb-3 space-y-1">
                         {v.changes.map((c, ci) => (
                           <div key={ci} className={`text-[11px] rounded px-2 py-1 ${
-                            c.type === 'add'    ? 'bg-green-50 text-green-700' :
-                            c.type === 'delete' ? 'bg-red-50 text-red-700' :
-                            'bg-yellow-50 text-yellow-700'
+                            c.type === 'add'    ? 'bg-green-50 dark:bg-green-950/60 text-green-700 dark:text-green-400' :
+                            c.type === 'delete' ? 'bg-red-50 dark:bg-red-950/60 text-red-700 dark:text-red-400' :
+                            'bg-yellow-50 dark:bg-yellow-950/60 text-yellow-700 dark:text-yellow-400'
                           }`}>
                             {c.type === 'add'    && c.row && <span><b>+</b> {c.row.store_name || c.row.customercode}</span>}
                             {c.type === 'delete' && c.row && <span><b>−</b> {c.row.store_name || c.row.customercode}</span>}
@@ -560,7 +560,7 @@ export default function CustomerMasterPage() {
 
       {/* ── Toast ──────────────────────────────────────────────────────────── */}
       {toast && (
-        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 px-4 py-2.5 rounded-lg shadow-lg text-sm text-white transition-all ${toast.ok ? 'bg-google-green' : 'bg-google-red'}`}>
+        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 px-4 py-2.5 rounded-lg shadow-lg text-sm text-white transition-all ${toast.ok ? 'bg-green-600' : 'bg-destructive'}`}>
           {toast.msg}
         </div>
       )}
