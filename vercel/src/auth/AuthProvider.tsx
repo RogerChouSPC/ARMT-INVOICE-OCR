@@ -17,7 +17,7 @@ interface AuthCtx {
   getToken: () => Promise<string | null>
 }
 
-const msalInstance = new PublicClientApplication(msalConfig)
+export const msalInstance = new PublicClientApplication(msalConfig)
 
 function accountToUser(account: AccountInfo): AuthUser {
   return { name: account.name ?? account.username, email: account.username, account }
@@ -28,25 +28,31 @@ const AuthContext = createContext<AuthCtx | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser]       = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error]               = useState<string | null>(null)
 
   useEffect(() => {
     const init = async () => {
       try {
         await msalInstance.initialize()
 
-        // Handle any pending redirect from older loginRedirect attempts (3 s timeout)
-        const result = await Promise.race([
-          msalInstance.handleRedirectPromise({ navigateToLoginRequestUrl: false }),
-          new Promise<null>(resolve => setTimeout(() => resolve(null), 3000)),
-        ])
+        // Only call handleRedirectPromise if the URL actually contains an auth code.
+        // On a plain refresh there is nothing to process, so skip it and just read
+        // the account cache directly — this avoids the 3s stall.
+        const hasCode =
+          window.location.hash.includes('code=') ||
+          window.location.search.includes('code=')
 
-        if (result?.account) { setUser(accountToUser(result.account)); return }
+        if (hasCode) {
+          const result = await msalInstance.handleRedirectPromise({ navigateToLoginRequestUrl: false })
+          if (result?.account) {
+            setUser(accountToUser(result.account))
+            return
+          }
+        }
 
         const accounts = msalInstance.getAllAccounts()
         if (accounts.length > 0) setUser(accountToUser(accounts[0]))
-      } catch {
-        // Ignore stale redirect errors — user can still log in via popup
+      } catch (e) {
+        console.error('MSAL init error:', e)
       } finally {
         setLoading(false)
       }
@@ -72,7 +78,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     msalInstance.logoutPopup({ account: user?.account }).catch(() => {
-      // Fallback: clear local state and reload
       setUser(null)
       window.location.reload()
     })
@@ -95,7 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, error, login, logout, getToken }}>
+    <AuthContext.Provider value={{ user, loading, error: null, login, logout, getToken }}>
       {children}
     </AuthContext.Provider>
   )
