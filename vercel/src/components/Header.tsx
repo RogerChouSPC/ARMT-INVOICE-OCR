@@ -18,7 +18,7 @@ const TAB_LABELS: Record<Tab, string> = {
 
 export default function Header({ activeTab, onTabChange, user, onLogout }: HeaderProps) {
   return (
-    <header className="sticky top-0 z-20 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border">
+    <header className="sticky top-0 z-20 border-t-[3px] border-t-primary bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border">
       <div className="w-full px-6 h-14 flex items-center justify-between">
 
         <div className="flex items-center h-full gap-6">

@@ -69,9 +69,9 @@ export default function UploadZone({ onFiles, disabled }: UploadZoneProps) {
   return (
     <div
       className={`
-        card p-12 flex flex-col items-center justify-center gap-5
+        card p-14 flex flex-col items-center justify-center gap-5
         border-2 border-dashed transition-all duration-200 select-none
-        ${dragging ? 'border-primary bg-muted scale-[1.01]' : 'border-border hover:border-primary/50 hover:bg-muted/30'}
+        ${dragging ? 'border-primary bg-muted' : 'border-border hover:border-primary/50 hover:bg-muted/30'}
         ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
       `}
       onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
@@ -81,7 +81,7 @@ export default function UploadZone({ onFiles, disabled }: UploadZoneProps) {
     >
       <input ref={fileRef} type="file" accept="application/pdf" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} disabled={disabled} />
 
-      <div className={`w-16 h-16 rounded-3xl flex items-center justify-center transition-colors ${dragging ? 'bg-primary' : 'bg-muted'}`}>
+      <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-colors ${dragging ? 'bg-primary' : 'bg-muted'}`}>
         <svg viewBox="0 0 24 24" className={`w-8 h-8 transition-colors ${dragging ? 'fill-primary-foreground' : 'fill-primary'}`}>
           <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z" />
         </svg>

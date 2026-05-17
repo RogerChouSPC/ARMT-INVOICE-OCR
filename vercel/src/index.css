@@ -7,14 +7,14 @@
 @layer base {
   :root {
     --background:             0 0% 100%;
-    --foreground:             222.2 84% 4.9%;
-    --primary:                221.2 83.2% 53.3%;
-    --primary-foreground:     210 40% 98%;
-    --muted:                  210 40% 96.1%;
-    --muted-foreground:       215.4 16.3% 46.9%;
-    --border:                 214.3 31.8% 91.4%;
-    --destructive:            0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --foreground:             220 25% 8%;
+    --primary:                220 90% 47%;
+    --primary-foreground:     0 0% 100%;
+    --muted:                  215 30% 96%;
+    --muted-foreground:       215 16% 47%;
+    --border:                 215 20% 90%;
+    --destructive:            0 84% 58%;
+    --destructive-foreground: 0 0% 100%;
   }
 
   html {
@@ -34,7 +34,7 @@
 
 @layer components {
   .btn-primary {
-    @apply inline-flex items-center gap-2 px-6 py-2.5 bg-primary text-primary-foreground rounded-3xl text-sm font-medium
+    @apply inline-flex items-center gap-2 px-6 py-2.5 bg-primary text-primary-foreground rounded-xl text-sm font-medium
            shadow-button transition-all duration-150
            hover:opacity-90 hover:shadow-md
            active:scale-95
@@ -42,7 +42,7 @@
   }
 
   .btn-secondary {
-    @apply inline-flex items-center gap-2 px-6 py-2.5 bg-background text-foreground border border-border rounded-3xl text-sm font-medium
+    @apply inline-flex items-center gap-2 px-6 py-2.5 bg-background text-foreground border border-border rounded-xl text-sm font-medium
            transition-all duration-150
            hover:bg-muted hover:border-primary/40
            active:scale-95
@@ -50,7 +50,7 @@
   }
 
   .card {
-    @apply bg-background rounded-3xl shadow-card border border-border;
+    @apply bg-background rounded-2xl shadow-card border border-border;
   }
 
   .input-cell {

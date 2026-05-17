@@ -141,12 +141,12 @@ export default function App() {
       {activeTab === 'ocr' && (
         <main className="flex-1 max-w-3xl mx-auto w-full px-6 flex flex-col gap-6">
           {rows.length === 0 && statuses.length === 0 && (
-            <div className="text-center pt-20 pb-8 animate-fade-in">
-              <h2 className="text-5xl font-bold text-foreground tracking-tight leading-tight">
-                Extract invoices<br />in seconds
+            <div className="text-center pt-20 pb-6 animate-fade-in">
+              <h2 className="text-6xl font-bold text-foreground tracking-tight leading-[1.1]">
+                Extract invoices<br />in seconds.
               </h2>
-              <p className="text-lg text-muted-foreground mt-4">
-                Drop in Thai PDFs. Get structured data back.
+              <p className="text-lg text-muted-foreground mt-5">
+                Drop in Thai PDFs. Get structured Excel data back.
               </p>
             </div>
           )}
