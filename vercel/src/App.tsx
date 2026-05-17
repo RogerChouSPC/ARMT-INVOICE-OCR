@@ -143,12 +143,10 @@ export default function App() {
         <main className="flex-1 max-w-3xl mx-auto w-full px-6 flex flex-col gap-6">
           {rows.length === 0 && statuses.length === 0 && (
             <div className="text-center pt-20 pb-6 animate-fade-in">
-              <h2 className="text-6xl font-bold text-foreground tracking-tight leading-[1.1]">
-                Extract invoices<br />in seconds.
+              <h2 className="text-6xl font-bold text-foreground tracking-tight leading-[1.2]">
+                Extract invoices in seconds<br />
+                <span className="text-foreground">Supported for </span><CustomerCycle />
               </h2>
-              <div className="mt-5 flex justify-center">
-                <CustomerCycle />
-              </div>
             </div>
           )}
 
