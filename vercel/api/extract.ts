@@ -38,6 +38,7 @@ HOW TO MAP customergroup and customercode:
    - taxid 0107536000633 with "คลังครอสด็อคธัญบุรี 00485" → customercode "0115526"
    - taxid 0107536000633 headquarters → customercode "0102856"
    - taxid 0105540016253 (City Mall / ซิตี้มอลล์) with branch 00001 → customercode "0114682"
+   - taxid 0105565017547 (บริษัท ออล สปีดดี้ / All Speedy) → treat as ซีพี ออลล์, use customergroup "07 - เซเว่นอีเลฟเว่น (7-11)" and customercode from the ซีพี ออลล์ row in the Customer Master
 4. Copy customergroup and customercode EXACTLY from the matching Customer Master row.
 
 HOW TO MAP vendor_customercode:
@@ -63,8 +64,12 @@ Output fields (22 columns):
 - vendor_expensegroup: expense group if present, else ""
 - divisionsale: division or sale code if present, else ""
 - invoiceno: invoice number / เลขที่
-- invoicedate: invoice date → YYYY-MM-DD (Buddhist Era: subtract 543 from year)
-- duedate: due/payment date → YYYY-MM-DD
+- invoicedate: invoice date → YYYY-MM-DD. Date conversion rules:
+  * 4-digit year ≥ 2500 = Buddhist Era → subtract 543 (e.g., 2569 → 2026)
+  * 4-digit year < 2500 = already Gregorian → use as-is (e.g., 2026 → 2026)
+  * 2-digit year = Gregorian short form → prepend "20" (e.g., "26" → 2026, "30/04/26" → 2026-04-30)
+  * DO NOT subtract 543 from 2-digit years
+- duedate: due/payment date → YYYY-MM-DD (same conversion rules as invoicedate)
 - description: main invoice description / purpose line
 - product_description: product or service line item detail
 - amount: amount before deductions (plain number, no commas)
@@ -80,7 +85,7 @@ Rules:
 - Multiple line items per invoice → one row per item (share header: invoiceno, taxid, dates, etc.)
 - Missing fields → empty string ""
 - Numbers → plain string without commas or currency symbols
-- Dates → YYYY-MM-DD; Buddhist Era year → subtract 543
+- Dates → YYYY-MM-DD; 4-digit year ≥ 2500 = Buddhist Era → subtract 543; 2-digit year = prepend "20" (never subtract 543)
 - Tax ID = exactly 13 digits
 - Return ONLY a valid JSON array, no markdown fences, no explanation`
 }
