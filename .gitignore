@@ -1,10 +1,8 @@
-# Local Netlify folder
-.netlify
-
 # Build output
 node_modules/
 dist/
 *.tsbuildinfo
+.vite/
 
 # Secrets
 .env
@@ -23,4 +21,3 @@ vercel/node_modules/
 vercel/dist/
 vercel/.vercel/
 vercel/vercel/
-localhost/node_modules/
