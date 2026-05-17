@@ -1,11 +1,27 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
+async function verifyAzureToken(authHeader: string | undefined): Promise<boolean> {
+  if (!authHeader?.startsWith('Bearer ')) return false
+  try {
+    const res = await fetch('https://graph.microsoft.com/v1.0/me', {
+      headers: { Authorization: authHeader },
+    })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 const MODEL = 'google/gemini-2.5-flash'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' })
+  }
+
+  if (!await verifyAzureToken(req.headers.authorization)) {
+    return res.status(401).json({ error: 'Unauthorized' })
   }
 
   const apiKey = process.env.OPENROUTER_API_KEY
