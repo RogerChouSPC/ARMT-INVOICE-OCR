@@ -140,67 +140,72 @@ export default function App() {
       )}
 
       {activeTab === 'ocr' && (
-        <main className="flex-1 max-w-3xl mx-auto w-full px-6 flex flex-col gap-6">
+        <main className="flex-1 w-full px-6 flex flex-col gap-6">
+
           {rows.length === 0 && statuses.length === 0 && (
-            <div className="text-center pt-20 pb-6 animate-fade-in">
-              <h2 className="text-6xl font-bold text-foreground tracking-tight leading-[1.2]">
-                Extract invoices in seconds<br />
-                Supported for
+            <div className="text-center pt-20 pb-6 max-w-4xl mx-auto w-full animate-fade-in">
+              <h2 className="text-6xl font-bold text-foreground tracking-tight leading-[1.2] whitespace-nowrap">
+                Extract invoices in seconds
               </h2>
+              <p className="text-6xl font-bold text-foreground tracking-tight leading-[1.2]">
+                Supported for
+              </p>
               <CustomerCycle />
             </div>
           )}
 
-          {rows.length > 0 && (
-            <div className="pt-8 pb-2 flex items-center justify-between animate-fade-in">
-              <span className="text-sm text-muted-foreground">{rows.length} {rows.length === 1 ? 'row' : 'rows'} extracted</span>
-              {allDone && !isProcessing && (
-                <label className="btn-secondary cursor-pointer">
-                  <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
-                    <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
-                  </svg>
-                  Add more
-                  <input type="file" accept="application/pdf" multiple className="hidden"
-                    onChange={(e) => e.target.files && processFiles(Array.from(e.target.files))} />
-                </label>
-              )}
-            </div>
-          )}
-
-          <UploadZone onFiles={processFiles} disabled={isProcessing} />
-          <ProcessingStatus items={statuses} />
-
-          {isProcessing && rows.length === 0 && <TableSkeleton />}
-
-          {rows.length > 0 && (
-            <>
-              <ResultsTable rows={rows} onUpdate={setRows} />
-
-              <div className="flex items-center justify-between pb-10">
-                <button
-                  className="text-sm text-muted-foreground hover:text-destructive transition-colors"
-                  onClick={clearAll}
-                >
-                  Clear all
-                </button>
-
-                <div className="flex items-center gap-3">
-                  <button className="btn-secondary" onClick={refreshCustomerMapping} disabled={isProcessing}>
+          <div className="max-w-3xl mx-auto w-full flex flex-col gap-6">
+            {rows.length > 0 && (
+              <div className="pt-8 pb-2 flex items-center justify-between animate-fade-in">
+                <span className="text-sm text-muted-foreground">{rows.length} {rows.length === 1 ? 'row' : 'rows'} extracted</span>
+                {allDone && !isProcessing && (
+                  <label className="btn-secondary cursor-pointer">
                     <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
-                      <path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
+                      <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
                     </svg>
-                    Refresh Mapping
-                  </button>
-                  <button className="btn-primary" onClick={() => exportToExcel(rows)} disabled={rows.length === 0}>
-                    <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
-                      <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
-                    </svg>
-                    Download Excel
-                  </button>
-                </div>
+                    Add more
+                    <input type="file" accept="application/pdf" multiple className="hidden"
+                      onChange={(e) => e.target.files && processFiles(Array.from(e.target.files))} />
+                  </label>
+                )}
               </div>
-            </>
-          )}
+            )}
+
+            <UploadZone onFiles={processFiles} disabled={isProcessing} />
+            <ProcessingStatus items={statuses} />
+
+            {isProcessing && rows.length === 0 && <TableSkeleton />}
+
+            {rows.length > 0 && (
+              <>
+                <ResultsTable rows={rows} onUpdate={setRows} />
+
+                <div className="flex items-center justify-between pb-10">
+                  <button
+                    className="text-sm text-muted-foreground hover:text-destructive transition-colors"
+                    onClick={clearAll}
+                  >
+                    Clear all
+                  </button>
+
+                  <div className="flex items-center gap-3">
+                    <button className="btn-secondary" onClick={refreshCustomerMapping} disabled={isProcessing}>
+                      <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
+                        <path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
+                      </svg>
+                      Refresh Mapping
+                    </button>
+                    <button className="btn-primary" onClick={() => exportToExcel(rows)} disabled={rows.length === 0}>
+                      <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
+                        <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
+                      </svg>
+                      Download Excel
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         </main>
       )}
     </div>
