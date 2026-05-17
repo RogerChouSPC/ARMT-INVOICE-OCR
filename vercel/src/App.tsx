@@ -145,8 +145,9 @@ export default function App() {
             <div className="text-center pt-20 pb-6 animate-fade-in">
               <h2 className="text-6xl font-bold text-foreground tracking-tight leading-[1.2]">
                 Extract invoices in seconds<br />
-                <span className="text-foreground">Supported for </span><CustomerCycle />
+                Supported for
               </h2>
+              <CustomerCycle />
             </div>
           )}
 

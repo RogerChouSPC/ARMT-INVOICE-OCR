@@ -1,4 +1,6 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
+import { motion } from 'framer-motion'
+import { DropdownMenu } from 'radix-ui'
 
 const CUSTOMERS = [
   'Aeon', 'Big C', 'Big C Food', 'Boots', 'BTM',
@@ -8,53 +10,55 @@ const CUSTOMERS = [
 ]
 
 export default function CustomerCycle() {
-  const [index, setIndex]       = useState(0)
-  const [visible, setVisible]   = useState(true)
-  const [showList, setShowList] = useState(false)
-  const wrapperRef = useRef<HTMLSpanElement>(null)
+  const [index, setIndex] = useState(0)
 
+  // setTimeout pattern — resets every time index changes, no drift
   useEffect(() => {
-    const id = setInterval(() => {
-      setVisible(false)
-      setTimeout(() => {
-        setIndex(i => (i + 1) % CUSTOMERS.length)
-        setVisible(true)
-      }, 400)
-    }, 3600)
-    return () => clearInterval(id)
-  }, [])
-
-  useEffect(() => {
-    if (!showList) return
-    const fn = (e: MouseEvent) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
-        setShowList(false)
-      }
-    }
-    document.addEventListener('mousedown', fn)
-    return () => document.removeEventListener('mousedown', fn)
-  }, [showList])
+    const id = setTimeout(() => {
+      setIndex(i => (i + 1) % CUSTOMERS.length)
+    }, 2400)
+    return () => clearTimeout(id)
+  }, [index])
 
   return (
-    <span className="inline-flex items-baseline gap-2" ref={wrapperRef}>
-      <span
-        className="text-primary transition-opacity duration-[400ms] ease-in-out"
-        style={{ opacity: visible ? 1 : 0 }}
-      >
-        {CUSTOMERS[index]}
+    <div className="flex justify-center items-center gap-3">
+      {/* overflow-hidden clips the spring motion above/below */}
+      <span className="relative flex justify-center overflow-hidden text-6xl font-bold tracking-tight leading-[1.2] py-1">
+        {/* invisible widest-name spacer gives the container correct width + height */}
+        <span className="invisible select-none" aria-hidden>Big C Food</span>
+
+        {CUSTOMERS.map((name, i) => (
+          <motion.span
+            key={i}
+            className="absolute text-primary"
+            initial={{ opacity: 0, y: 100 }}
+            transition={{ type: 'spring', stiffness: 50 }}
+            animate={
+              index === i
+                ? { y: 0, opacity: 1 }
+                : { y: index > i ? -100 : 100, opacity: 0 }
+            }
+          >
+            {name}
+          </motion.span>
+        ))}
       </span>
 
-      <span className="relative inline-flex items-center self-center">
-        <button
-          onClick={() => setShowList(v => !v)}
-          title="View all supported customers"
-          className="w-[18px] h-[18px] rounded-full border border-muted-foreground/40 text-muted-foreground/50 hover:text-primary hover:border-primary transition-colors inline-flex items-center justify-center text-[10px] font-bold flex-shrink-0"
-        >
-          i
-        </button>
-
-        {showList && (
-          <div className="absolute left-1/2 -translate-x-1/2 top-6 z-20 bg-background border border-border rounded-xl shadow-card-hover p-4 w-56 animate-fade-in">
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger asChild>
+          <button
+            className="w-5 h-5 rounded-full border border-muted-foreground/40 text-muted-foreground/50 hover:text-primary hover:border-primary transition-colors flex items-center justify-center text-[11px] font-bold self-center flex-shrink-0 outline-none"
+            title="View all supported customers"
+          >
+            i
+          </button>
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content
+            sideOffset={8}
+            align="center"
+            className="z-50 w-56 overflow-hidden rounded-xl border border-border bg-background p-4 shadow-card-hover outline-none animate-fade-in"
+          >
             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">
               {CUSTOMERS.length} supported customers
             </p>
@@ -63,9 +67,9 @@ export default function CustomerCycle() {
                 <span key={c} className="text-xs text-foreground">{c}</span>
               ))}
             </div>
-          </div>
-        )}
-      </span>
-    </span>
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu.Root>
+    </div>
   )
 }
