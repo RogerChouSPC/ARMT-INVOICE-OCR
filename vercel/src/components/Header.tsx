@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { Sparkles, LogOut, Sun, Moon } from 'lucide-react'
+import { Sparkles, LogOut, Sun, Moon, Zap, ZapOff } from 'lucide-react'
 import { useTheme } from '@/hooks/useTheme'
 
 type Tab = 'ocr' | 'customer-master'
@@ -10,6 +10,8 @@ interface HeaderProps {
   onTabChange: (tab: Tab) => void
   user: { name: string; email: string } | null
   onLogout: () => void
+  liveEnabled: boolean
+  onToggleLive: () => void
 }
 
 const TAB_LABELS: Record<Tab, string> = {
@@ -17,7 +19,7 @@ const TAB_LABELS: Record<Tab, string> = {
   'customer-master': 'Customer Master',
 }
 
-export default function Header({ activeTab, onTabChange, user, onLogout }: HeaderProps) {
+export default function Header({ activeTab, onTabChange, user, onLogout, liveEnabled, onToggleLive }: HeaderProps) {
   const { dark, toggle } = useTheme()
 
   return (
@@ -54,6 +56,19 @@ export default function Header({ activeTab, onTabChange, user, onLogout }: Heade
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={onToggleLive}
+            title={liveEnabled ? 'Turn off background animation' : 'Turn on background animation'}
+            className={`flex items-center gap-1.5 h-8 px-2.5 rounded-full text-xs font-medium transition-colors ${
+              liveEnabled
+                ? 'text-primary bg-primary/10 hover:bg-primary/20'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+            }`}
+          >
+            {liveEnabled ? <Zap className="h-3.5 w-3.5" /> : <ZapOff className="h-3.5 w-3.5" />}
+            Live
+          </button>
+
           <button
             onClick={toggle}
             title={dark ? 'Switch to light mode' : 'Switch to dark mode'}

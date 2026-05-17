@@ -20,6 +20,7 @@ type Tab = 'ocr' | 'customer-master'
 export default function App() {
   const { user, loading, error, logout, getToken } = useAuth()
   const [activeTab, setActiveTab]       = useState<Tab>('ocr')
+  const [liveEnabled, setLiveEnabled]   = useState(() => localStorage.getItem('live') !== 'off')
   const [statuses, setStatuses]         = useState<FileProcessingStatus[]>([])
   const [rows, setRows]                 = useState<InvoiceRow[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
@@ -132,9 +133,21 @@ export default function App() {
 
   return (
     <>
-    <BackgroundPaths />
+    {liveEnabled && <BackgroundPaths />}
     <div className="min-h-screen flex flex-col relative z-[2]">
-      <Header rowCount={rows.length} activeTab={activeTab} onTabChange={setActiveTab} user={user} onLogout={logout} />
+      <Header
+        rowCount={rows.length}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        user={user}
+        onLogout={logout}
+        liveEnabled={liveEnabled}
+        onToggleLive={() => {
+          const next = !liveEnabled
+          setLiveEnabled(next)
+          localStorage.setItem('live', next ? 'on' : 'off')
+        }}
+      />
 
       {activeTab === 'customer-master' && (
         <main className="flex-1 w-full px-6 py-8">
