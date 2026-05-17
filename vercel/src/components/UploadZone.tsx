@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback, useEffect } from 'react'
+import { useRef, useState, useCallback } from 'react'
 
 interface UploadZoneProps {
   onFiles: (files: File[]) => void
@@ -40,15 +40,7 @@ async function collectPdfsFromItems(items: DataTransferItemList): Promise<File[]
 
 export default function UploadZone({ onFiles, disabled }: UploadZoneProps) {
   const fileRef   = useRef<HTMLInputElement>(null)
-  const folderRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
-
-  useEffect(() => {
-    if (folderRef.current) {
-      folderRef.current.setAttribute('webkitdirectory', '')
-      folderRef.current.setAttribute('directory', '')
-    }
-  }, [])
 
   const handleFiles = useCallback(
     (files: FileList | null) => {
@@ -74,11 +66,6 @@ export default function UploadZone({ onFiles, disabled }: UploadZoneProps) {
     [handleFiles, onFiles, disabled]
   )
 
-  const browseFolder = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (!disabled) folderRef.current?.click()
-  }
-
   return (
     <div
       className={`
@@ -92,8 +79,7 @@ export default function UploadZone({ onFiles, disabled }: UploadZoneProps) {
       onDrop={onDrop}
       onClick={() => !disabled && fileRef.current?.click()}
     >
-      <input ref={fileRef}   type="file" accept="application/pdf" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} disabled={disabled} />
-      <input ref={folderRef} type="file" accept="application/pdf" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} disabled={disabled} />
+      <input ref={fileRef} type="file" accept="application/pdf" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} disabled={disabled} />
 
       <div className={`w-16 h-16 rounded-3xl flex items-center justify-center transition-colors ${dragging ? 'bg-primary' : 'bg-muted'}`}>
         <svg viewBox="0 0 24 24" className={`w-8 h-8 transition-colors ${dragging ? 'fill-primary-foreground' : 'fill-primary'}`}>
@@ -109,9 +95,17 @@ export default function UploadZone({ onFiles, disabled }: UploadZoneProps) {
           Drag & drop files or folders ·{' '}
           <span className="text-primary font-medium">browse files</span>
           {' · '}
-          <span className="text-primary font-medium cursor-pointer hover:underline" onClick={browseFolder}>
+          <label className="text-primary font-medium cursor-pointer hover:underline" onClick={e => e.stopPropagation()}>
             browse folder
-          </span>
+            <input
+              type="file"
+              multiple
+              className="hidden"
+              disabled={disabled}
+              onChange={(e) => handleFiles(e.target.files)}
+              ref={(el) => { if (el) { el.setAttribute('webkitdirectory', ''); el.setAttribute('directory', '') } }}
+            />
+          </label>
         </p>
         <p className="text-xs text-muted-foreground/60 mt-2">PDF files only · Thai language invoices · Subfolders supported</p>
       </div>

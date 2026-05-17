@@ -5,6 +5,7 @@ import Header from '@/components/Header'
 import UploadZone from '@/components/UploadZone'
 import ProcessingStatus from '@/components/ProcessingStatus'
 import ResultsTable from '@/components/ResultsTable'
+import TableSkeleton from '@/components/TableSkeleton'
 import CustomerMasterPage, { getCustomerMasterRows } from '@/components/CustomerMasterPage'
 import { extractPdfText } from '@/utils/pdfTextExtractor'
 import { renderPdfPages } from '@/utils/pdfRenderer'
@@ -148,6 +149,8 @@ export default function App() {
 
           <UploadZone onFiles={processFiles} disabled={isProcessing} />
           <ProcessingStatus items={statuses} />
+
+          {isProcessing && rows.length === 0 && <TableSkeleton />}
 
           {rows.length > 0 && (
             <>
