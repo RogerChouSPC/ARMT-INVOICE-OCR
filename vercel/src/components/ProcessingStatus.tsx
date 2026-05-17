@@ -20,6 +20,9 @@ const STATE_COLORS: Record<string, string> = {
   error:      'bg-destructive',
 }
 
+const isProcessing = (state: string) =>
+  state !== 'idle' && state !== 'done' && state !== 'error'
+
 interface Props { items: FileProcessingStatus[] }
 
 export default function ProcessingStatus({ items }: Props) {
@@ -35,10 +38,13 @@ export default function ProcessingStatus({ items }: Props) {
           {items.map((item, i) => (
             <div key={i}>
               <div className="flex items-center justify-between mb-1.5">
+                {/* left: file icon + name */}
                 <div className="flex items-center gap-2 min-w-0">
                   <FileIcon state={item.state} />
                   <span className="text-sm text-foreground truncate max-w-xs">{item.file.name}</span>
                 </div>
+
+                {/* right: eye → bar loader (if processing) → status label */}
                 <div className="flex items-center gap-2 shrink-0 ml-3">
                   <button
                     onClick={() => setPreviewFile(item.file)}
@@ -49,6 +55,19 @@ export default function ProcessingStatus({ items }: Props) {
                       <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" />
                     </svg>
                   </button>
+
+                  {isProcessing(item.state) && (
+                    <div className="flex items-end gap-[1.5px] h-4">
+                      {[0, 1, 2, 3, 4].map((j) => (
+                        <div
+                          key={j}
+                          className="bg-primary rounded-t-sm origin-bottom animate-bar-loader"
+                          style={{ width: '2.5px', height: '14px', animationDelay: `${(j + 1) * 0.12}s` }}
+                        />
+                      ))}
+                    </div>
+                  )}
+
                   <span className={`text-xs font-medium ${
                     item.state === 'error' ? 'text-destructive' :
                     item.state === 'done'  ? 'text-green-600'   : 'text-primary'
@@ -61,7 +80,7 @@ export default function ProcessingStatus({ items }: Props) {
               <div className="h-1 bg-muted rounded-full overflow-hidden">
                 <div
                   className={`h-full rounded-full transition-all duration-500 ${STATE_COLORS[item.state]} ${
-                    item.state !== 'idle' && item.state !== 'done' && item.state !== 'error' ? 'animate-pulse' : ''
+                    isProcessing(item.state) ? 'animate-pulse' : ''
                   }`}
                   style={{ width: `${item.progress}%` }}
                 />
@@ -100,17 +119,6 @@ function FileIcon({ state }: { state: string }) {
     <svg viewBox="0 0 24 24" className="w-4 h-4 fill-destructive shrink-0">
       <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
     </svg>
-  )
-  if (state !== 'idle') return (
-    <div className="flex items-end gap-[1.5px] h-4 shrink-0">
-      {[0, 1, 2, 3, 4].map((i) => (
-        <div
-          key={i}
-          className="bg-primary rounded-t-sm origin-bottom animate-bar-loader"
-          style={{ width: '2.5px', height: '14px', animationDelay: `${(i + 1) * 0.12}s` }}
-        />
-      ))}
-    </div>
   )
   return (
     <svg viewBox="0 0 24 24" className="w-4 h-4 fill-muted-foreground shrink-0">
