@@ -8,6 +8,7 @@ import ResultsTable from '@/components/ResultsTable'
 import TableSkeleton from '@/components/TableSkeleton'
 import CustomerMasterPage, { getCustomerMasterRows } from '@/components/CustomerMasterPage'
 import CustomerCycle from '@/components/CustomerCycle'
+import HeroBackground from '@/components/HeroBackground'
 import { extractPdfText } from '@/utils/pdfTextExtractor'
 import { renderPdfPages } from '@/utils/pdfRenderer'
 import { exportToExcel } from '@/utils/excelExporter'
@@ -131,6 +132,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
+      <HeroBackground />
       <Header rowCount={rows.length} activeTab={activeTab} onTabChange={setActiveTab} user={user} onLogout={logout} />
 
       {activeTab === 'customer-master' && (

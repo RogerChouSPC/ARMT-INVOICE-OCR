@@ -17,6 +17,18 @@
     --destructive-foreground: 0 0% 100%;
   }
 
+  .dark {
+    --background:             222 47% 6%;
+    --foreground:             210 40% 96%;
+    --primary:                217 91% 60%;
+    --primary-foreground:     0 0% 100%;
+    --muted:                  217 33% 14%;
+    --muted-foreground:       215 20% 58%;
+    --border:                 217 33% 19%;
+    --destructive:            0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+  }
+
   html {
     font-family: 'Inter', system-ui, sans-serif;
     font-size: 17px;
@@ -62,6 +74,11 @@
   .progress-bar {
     @apply h-1 bg-primary rounded-full transition-all duration-300;
   }
+}
+
+/* Dark mode card shadow override */
+.dark .card {
+  box-shadow: 0 1px 3px 0 rgba(0,0,0,.4), 0 4px 8px 3px rgba(0,0,0,.3);
 }
 
 /* Custom scrollbar */

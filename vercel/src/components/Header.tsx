@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
-import { Sparkles, LogOut } from 'lucide-react'
+import { Sparkles, LogOut, Sun, Moon } from 'lucide-react'
+import { useTheme } from '@/hooks/useTheme'
 
 type Tab = 'ocr' | 'customer-master'
 
@@ -17,6 +18,8 @@ const TAB_LABELS: Record<Tab, string> = {
 }
 
 export default function Header({ activeTab, onTabChange, user, onLogout }: HeaderProps) {
+  const { dark, toggle } = useTheme()
+
   return (
     <header className="sticky top-0 z-20 border-t-[3px] border-t-primary bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border">
       <div className="w-full px-6 h-14 flex items-center justify-between">
@@ -50,7 +53,16 @@ export default function Header({ activeTab, onTabChange, user, onLogout }: Heade
           </nav>
         </div>
 
-        {user && (
+        <div className="flex items-center gap-2">
+          <button
+            onClick={toggle}
+            title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+            className="h-8 w-8 flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </button>
+
+          {user && (
           <div className="flex items-center gap-2 pl-3 border-l border-border">
             <div className="text-right hidden sm:block">
               <p className="text-xs font-medium text-foreground leading-tight">{user.name}</p>
@@ -68,6 +80,7 @@ export default function Header({ activeTab, onTabChange, user, onLogout }: Heade
             </button>
           </div>
         )}
+        </div>
       </div>
     </header>
   )

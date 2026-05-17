@@ -34,13 +34,13 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
       ? 'fixed inset-0 z-50 bg-background flex flex-col'
       : 'card overflow-hidden animate-slide-up'
     }>
-      <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between shrink-0">
-        <h2 className="text-sm font-medium text-gray-700">
+      <div className="px-5 py-4 border-b border-border flex items-center justify-between shrink-0">
+        <h2 className="text-sm font-medium text-foreground">
           Extracted Data
-          <span className="ml-2 text-xs text-gray-400 font-normal">— click any cell to edit</span>
+          <span className="ml-2 text-xs text-muted-foreground font-normal">— click any cell to edit</span>
         </h2>
         <div className="flex items-center gap-3">
-          <span className="text-xs text-gray-500">{rows.length} rows · 22 columns</span>
+          <span className="text-xs text-muted-foreground">{rows.length} rows · 22 columns</span>
           <button
             onClick={() => setFullscreen(v => !v)}
             title={fullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen'}
@@ -63,11 +63,11 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
         <table className="w-full text-xs border-collapse">
           <thead>
             <tr className="bg-google-blue-light">
-              <th className="px-3 py-2.5 text-left font-medium text-gray-600 border-b border-gray-200 whitespace-nowrap w-10" />
+              <th className="px-3 py-2.5 text-left font-medium text-muted-foreground border-b border-border whitespace-nowrap w-10" />
               {INVOICE_COLUMNS.map((col) => (
                 <th
                   key={col.key}
-                  className="px-3 py-2.5 text-left font-medium text-gray-600 border-b border-gray-200 whitespace-nowrap"
+                  className="px-3 py-2.5 text-left font-medium text-muted-foreground border-b border-border whitespace-nowrap"
                   style={{ minWidth: col.width }}
                 >
                   {col.label}
@@ -79,13 +79,13 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
             {rows.map((row, rowIdx) => (
               <tr
                 key={rowIdx}
-                className="border-b border-gray-100 hover:bg-gray-50 transition-colors group"
+                className="border-b border-border hover:bg-muted/40 transition-colors group"
               >
                 {/* Delete button */}
                 <td className="px-2 py-1.5 text-center">
                   <button
                     onClick={() => deleteRow(rowIdx)}
-                    className="w-5 h-5 rounded text-gray-300 hover:text-google-red hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100 flex items-center justify-center"
+                    className="w-5 h-5 rounded text-muted-foreground/30 hover:text-destructive hover:bg-destructive/10 transition-colors opacity-0 group-hover:opacity-100 flex items-center justify-center"
                     title="Delete row"
                   >
                     <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current">
@@ -115,7 +115,7 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
                         />
                       ) : (
                         <span
-                          className={`block truncate px-1 py-0.5 rounded cursor-text ${value ? 'text-gray-800' : 'text-gray-300 italic'}`}
+                          className={`block truncate px-1 py-0.5 rounded cursor-text ${value ? 'text-foreground' : 'text-muted-foreground/40 italic'}`}
                           style={{ maxWidth: col.width - 12 }}
                           title={value}
                         >
