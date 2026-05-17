@@ -21,9 +21,9 @@ export default function CustomerCycle() {
   }, [index])
 
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex justify-center items-center gap-3">
       {/* overflow-hidden clips the spring motion above/below */}
-      <span className="relative flex justify-center overflow-hidden font-bold tracking-tight leading-[1.2] py-1">
+      <span className="relative flex justify-center overflow-hidden text-6xl font-bold tracking-tight leading-[1.2] py-1">
         {/* invisible widest-name spacer gives the container correct width + height */}
         <span className="invisible select-none" aria-hidden>Big C Food</span>
 
