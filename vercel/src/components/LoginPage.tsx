@@ -18,17 +18,10 @@ export default function LoginPage({ initError, isLoading }: Props) {
     try {
       await login()
     } catch (e) {
-      setError(`Sign-in failed: ${(e as Error).message}`)
+      setError((e as Error).message)
+    } finally {
       setSigning(false)
     }
-  }
-
-  const handleClearAndRetry = () => {
-    for (const key of Object.keys(localStorage)) {
-      if (key.startsWith('msal.')) localStorage.removeItem(key)
-    }
-    sessionStorage.clear()
-    window.location.reload()
   }
 
   const displayError = error ?? initError
@@ -70,16 +63,8 @@ export default function LoginPage({ initError, isLoading }: Props) {
           )}
 
           {displayError && (
-            <div className="flex flex-col gap-2">
-              <div className="text-sm text-destructive bg-destructive/10 rounded-2xl px-4 py-3 break-words">
-                {displayError}
-              </div>
-              <button
-                onClick={handleClearAndRetry}
-                className="text-xs text-muted-foreground underline underline-offset-2 self-start pl-1 hover:text-foreground"
-              >
-                Clear session and try again
-              </button>
+            <div className="text-sm text-destructive bg-destructive/10 rounded-2xl px-4 py-3 break-words">
+              {displayError}
             </div>
           )}
 
@@ -92,14 +77,20 @@ export default function LoginPage({ initError, isLoading }: Props) {
               <div className="h-5 w-5 rounded-full border-2 border-white border-t-transparent animate-spin flex-shrink-0" />
             ) : (
               <svg width="20" height="20" viewBox="0 0 21 21" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0">
-                <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
-                <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
-                <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
+                <rect x="1"  y="1"  width="9" height="9" fill="#F25022"/>
+                <rect x="11" y="1"  width="9" height="9" fill="#7FBA00"/>
+                <rect x="1"  y="11" width="9" height="9" fill="#00A4EF"/>
                 <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
               </svg>
             )}
-            {signing ? 'Redirecting to Microsoft…' : isLoading ? 'Please wait…' : 'Sign in with Microsoft'}
+            {signing ? 'Opening Microsoft sign-in…' : isLoading ? 'Please wait…' : 'Sign in with Microsoft'}
           </button>
+
+          {signing && (
+            <p className="text-xs text-muted-foreground text-center">
+              A sign-in window should open. If nothing appears, check if your browser blocked a popup.
+            </p>
+          )}
 
           <p className="text-xs text-muted-foreground text-center">
             Access is restricted to authorised company accounts only.

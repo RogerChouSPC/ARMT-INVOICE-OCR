@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
-import { PublicClientApplication, AccountInfo, InteractionRequiredAuthError } from '@azure/msal-browser'
+import { PublicClientApplication, AccountInfo, InteractionRequiredAuthError, BrowserAuthError } from '@azure/msal-browser'
 import { msalConfig, loginRequest } from './msalConfig'
 
 interface AuthUser {
@@ -19,12 +19,8 @@ interface AuthCtx {
 
 const msalInstance = new PublicClientApplication(msalConfig)
 
-function clearInteractionState() {
-  for (const key of Object.keys(localStorage)) {
-    if (key.includes('.interaction.') || key.includes('.request.params') || key.includes('.nonce.')) {
-      localStorage.removeItem(key)
-    }
-  }
+function accountToUser(account: AccountInfo): AuthUser {
+  return { name: account.name ?? account.username, email: account.username, account }
 }
 
 const AuthContext = createContext<AuthCtx | null>(null)
@@ -32,77 +28,67 @@ const AuthContext = createContext<AuthCtx | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser]       = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState<string | null>(null)
+  const [error]               = useState<string | null>(null)
 
   useEffect(() => {
-    // Give MSAL 8 seconds max — if handleRedirectPromise hangs, unblock the UI
-    const timeout = setTimeout(() => {
-      setLoading(false)
-      setError('Sign-in timed out. Click "Sign in with Microsoft" to try again.')
-      clearInteractionState()
-    }, 8000)
-
     const init = async () => {
       try {
         await msalInstance.initialize()
-        // navigateToLoginRequestUrl:false prevents MSAL from navigating to the
-        // token endpoint URL after processing the auth code (causes AADSTS900561)
-        const result = await msalInstance.handleRedirectPromise({ navigateToLoginRequestUrl: false })
 
-        if (result?.account) {
-          setUser({
-            name:    result.account.name ?? result.account.username,
-            email:   result.account.username,
-            account: result.account,
-          })
-        } else {
-          const accounts = msalInstance.getAllAccounts()
-          if (accounts.length > 0) {
-            setUser({
-              name:    accounts[0].name ?? accounts[0].username,
-              email:   accounts[0].username,
-              account: accounts[0],
-            })
-          }
-        }
-      } catch (e) {
-        clearInteractionState()
-        const msg = (e as Error).message ?? String(e)
-        console.error('MSAL init error:', msg)
-        setError(`Sign-in error: ${msg}`)
+        // Handle any pending redirect from older loginRedirect attempts (3 s timeout)
+        const result = await Promise.race([
+          msalInstance.handleRedirectPromise({ navigateToLoginRequestUrl: false }),
+          new Promise<null>(resolve => setTimeout(() => resolve(null), 3000)),
+        ])
+
+        if (result?.account) { setUser(accountToUser(result.account)); return }
+
+        const accounts = msalInstance.getAllAccounts()
+        if (accounts.length > 0) setUser(accountToUser(accounts[0]))
+      } catch {
+        // Ignore stale redirect errors — user can still log in via popup
       } finally {
-        clearTimeout(timeout)
         setLoading(false)
       }
     }
-
     init()
-    return () => clearTimeout(timeout)
   }, [])
 
   const login = async () => {
-    clearInteractionState()
-    await msalInstance.loginRedirect(loginRequest)
+    try {
+      const result = await msalInstance.loginPopup(loginRequest)
+      if (result.account) setUser(accountToUser(result.account))
+    } catch (e) {
+      const code = (e as BrowserAuthError)?.errorCode ?? ''
+      if (code === 'popup_window_error' || code === 'empty_window_error' || code === 'user_cancelled') {
+        throw new Error(
+          'The sign-in popup was blocked or closed. ' +
+          'Please allow popups for this site in your browser and try again.'
+        )
+      }
+      throw e
+    }
   }
 
   const logout = () => {
-    msalInstance.logoutRedirect({
-      account: user?.account,
-      postLogoutRedirectUri: window.location.origin,
+    msalInstance.logoutPopup({ account: user?.account }).catch(() => {
+      // Fallback: clear local state and reload
+      setUser(null)
+      window.location.reload()
     })
   }
 
   const getToken = async (): Promise<string | null> => {
     if (!user) return null
     try {
-      const result = await msalInstance.acquireTokenSilent({
-        ...loginRequest,
-        account: user.account,
-      })
+      const result = await msalInstance.acquireTokenSilent({ ...loginRequest, account: user.account })
       return result.accessToken
     } catch (e) {
       if (e instanceof InteractionRequiredAuthError) {
-        await msalInstance.acquireTokenRedirect({ ...loginRequest, account: user.account })
+        try {
+          const result = await msalInstance.acquireTokenPopup({ ...loginRequest, account: user.account })
+          return result.accessToken
+        } catch { return null }
       }
       return null
     }
