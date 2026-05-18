@@ -17,8 +17,10 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
   const [fullscreen, setFullscreen] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [history, setHistory] = useState<Snapshot[]>([])
+  const [highlightedCells, setHighlightedCells] = useState<Set<string>>(new Set())
   const initialSaved = useRef(false)
   const lastSnapshotJson = useRef('')
+  const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Save initial snapshot when rows first arrive; reset when cleared
   useEffect(() => {
@@ -67,7 +69,20 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
   }
 
   const restoreVersion = (snap: Snapshot) => {
+    // Highlight cells that differ from current state
+    const changed = new Set<string>()
+    snap.rows.forEach((snapRow, i) => {
+      if (i >= rows.length) return
+      for (const col of INVOICE_COLUMNS) {
+        if (String(rows[i][col.key] ?? '') !== String(snapRow[col.key] ?? '')) {
+          changed.add(`${i}:${col.key}`)
+        }
+      }
+    })
+    setHighlightedCells(changed)
     onUpdate(snap.rows.map(r => ({ ...r })))
+    if (highlightTimer.current) clearTimeout(highlightTimer.current)
+    highlightTimer.current = setTimeout(() => setHighlightedCells(new Set()), 3000)
   }
 
   const clearHistory = () => {
@@ -173,11 +188,15 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
 
                   {INVOICE_COLUMNS.map((col) => {
                     const isEditing = editCell?.row === rowIdx && editCell?.col === col.key
+                    const isHighlighted = highlightedCells.has(`${rowIdx}:${col.key}`)
                     const value = String(row[col.key] ?? '')
                     return (
                       <td
                         key={col.key}
-                        className={`px-1.5 py-1 ${isEditing ? 'bg-google-blue-light ring-1 ring-google-blue ring-inset rounded' : ''}`}
+                        className={`px-1.5 py-1 transition-colors duration-700 ${
+                          isEditing     ? 'bg-google-blue-light ring-1 ring-google-blue ring-inset rounded' :
+                          isHighlighted ? 'bg-amber-100 dark:bg-amber-950/50' : ''
+                        }`}
                         onClick={() => handleCellClick(rowIdx, col.key)}
                       >
                         {isEditing ? (

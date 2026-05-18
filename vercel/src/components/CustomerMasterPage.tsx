@@ -142,6 +142,7 @@ export default function CustomerMasterPage() {
   const [expandedVersion, setExpandedVersion] = useState<string | null>(null)
   const [editCell, setEditCell] = useState<{ row: number; col: keyof CustomerRow } | null>(null)
   const [editValue, setEditValue] = useState('')
+  const [dirtyCells, setDirtyCells] = useState<Set<string>>(new Set())
   const [toast, setToast]       = useState<{ msg: string; ok: boolean } | null>(null)
   const importRef = useRef<HTMLInputElement>(null)
 
@@ -197,6 +198,7 @@ export default function CustomerMasterPage() {
       setRows(finalRows)
       setHistory(newHistory)
       setDirty(false)
+      setDirtyCells(new Set())
       showToast('Saved successfully')
     } catch (e) {
       showToast((e as Error).message || 'Save failed', false)
@@ -226,6 +228,7 @@ export default function CustomerMasterPage() {
     setRows(seedRows)
     setHistory(newHistory)
     setDirty(false)
+    setDirtyCells(new Set())
     showToast(`Restored to default (${seedRows.length} rows)`)
   }, [history])
 
@@ -242,6 +245,7 @@ export default function CustomerMasterPage() {
     localStorage.setItem(LS_ROWS, JSON.stringify(version.snapshot))
     setRows(version.snapshot)
     setDirty(false)
+    setDirtyCells(new Set())
     showToast(`Restored: ${version.snapshot.length} rows`)
   }, [history])
 
@@ -254,9 +258,12 @@ export default function CustomerMasterPage() {
 
   const commitEdit = () => {
     if (!editCell) return
+    const rowId = rows[editCell.row].id
+    const cellKey = `${rowId}:${String(editCell.col)}`
     setRows(prev => prev.map((r, i) =>
       i === editCell.row ? { ...r, [editCell.col]: editValue } : r
     ))
+    setDirtyCells(prev => new Set([...prev, cellKey]))
     setDirty(true)
     setEditCell(null)
   }
@@ -410,11 +417,15 @@ export default function CustomerMasterPage() {
                     <td className="px-2 py-1 text-center text-muted-foreground/60">{ri + 1}</td>
                     {COLS.map(c => {
                       const isEditing = editCell?.row === ri && editCell?.col === c.key
+                      const isDirty = dirtyCells.has(`${row.id}:${String(c.key)}`)
                       const val = row[c.key] as string
                       return (
                         <td
                           key={c.key as string}
-                          className={`px-1.5 py-1 cursor-text ${isEditing ? 'bg-google-blue-light ring-1 ring-google-blue ring-inset rounded' : ''}`}
+                          className={`px-1.5 py-1 cursor-text transition-colors duration-700 ${
+                            isEditing ? 'bg-google-blue-light ring-1 ring-google-blue ring-inset rounded' :
+                            isDirty   ? 'bg-amber-100 dark:bg-amber-950/50' : ''
+                          }`}
                           onClick={() => !isEditing && startEdit(ri, c.key)}
                         >
                           {isEditing ? (
@@ -479,6 +490,13 @@ export default function CustomerMasterPage() {
                     <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
                   </svg>
                   Default
+                </button>
+                <button
+                  onClick={() => { setHistory([]); localStorage.removeItem(LS_HISTORY) }}
+                  title="Clear all history"
+                  className="text-[11px] px-2 py-1 rounded-full border border-border text-muted-foreground hover:text-destructive hover:border-destructive transition-colors"
+                >
+                  Clear
                 </button>
                 <button onClick={() => setShowHistory(false)} className="text-muted-foreground hover:text-foreground">
                   <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" /></svg>
