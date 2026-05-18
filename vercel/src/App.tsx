@@ -10,6 +10,7 @@ import CustomerMasterPage, { getCustomerMasterRows } from '@/components/Customer
 import CustomerCycle from '@/components/CustomerCycle'
 import BackgroundPaths from '@/components/BackgroundPaths'
 import { extractPdfText } from '@/utils/pdfTextExtractor'
+import { detectCustomer, shouldUseOcr } from '@/config/customers'
 import { renderPdfPages } from '@/utils/pdfRenderer'
 import { exportToExcel } from '@/utils/excelExporter'
 import type { InvoiceRow, FileProcessingStatus } from '@/types/invoice'
@@ -46,7 +47,11 @@ export default function App() {
         const { text: pdfText, isDigital, pageCount } = await extractPdfText(file)
         let extractedRows: Partial<InvoiceRow>[] = []
 
-        if (isDigital) {
+        // Per-customer config decides OCR vs direct text; falls back to auto-detection.
+        const customerRule = detectCustomer(pdfText, file.name)
+        const useOcr = shouldUseOcr(customerRule, isDigital)
+
+        if (!useOcr) {
           updateStatus(i, { state: 'extracting', progress: 50 })
           const token = await getToken()
           const res = await fetch('/api/extract', {
@@ -100,7 +105,7 @@ export default function App() {
         if (fileRows.length === 0) fileRows.push({ ...EMPTY_ROW(), remark: file.name })
         newRows.push(...fileRows)
         updateStatus(i, { state: 'done', progress: 100, rows: fileRows })
-        console.info(`${file.name}: ${isDigital ? 'digital' : 'scanned'} PDF, ${pageCount} page(s), ${fileRows.length} row(s)`)
+        console.info(`${file.name}: customer=${customerRule?.id ?? 'unknown'}, ${useOcr ? 'OCR' : 'text'} path, ${pageCount} page(s), ${fileRows.length} row(s)`)
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Unknown error'
         updateStatus(i, { state: 'error', progress: 0, error: msg })

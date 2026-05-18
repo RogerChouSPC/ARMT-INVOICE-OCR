@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { detectCustomer, buildCustomerInstructions } from '../src/config/customers'
 
 async function verifyAzureToken(authHeader: string | undefined): Promise<boolean> {
   if (!authHeader?.startsWith('Bearer ')) return false
@@ -16,7 +17,7 @@ const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 const MODEL = 'google/gemini-2.5-flash'
 const OUR_TAXID = '0107537001421'
 
-function buildSystemPrompt(customerMasterJson: string): string {
+function buildSystemPrompt(customerMasterJson: string, customerSection: string): string {
   return `You are an expert at extracting structured data from Thai invoice text (ใบแจ้งหนี้, ใบวางบิล, ใบเสร็จรับเงิน).
 
 CRITICAL CONTEXT — READ CAREFULLY:
@@ -33,42 +34,16 @@ HOW TO MAP customergroup and customercode:
 2. Find the issuer's company name and branch from the invoice header.
 3. Look up the CUSTOMER MASTER table above: match by taxid first, then refine by company name/branch.
    - If the same taxid has multiple entries (e.g., ซีพี แอ็กซ์ตร้า), pick the row whose store_name best matches the issuer's name in the invoice.
-   - For example: taxid 0107567000414 with "Lotus" or "โลตัส" or "LT" → group "05 - โลตัส"
+   - taxid 0107567000414 with "Lotus" or "โลตัส" or "LT" → group "05 - โลตัส"
    - taxid 0107567000414 with "Makro" or "แม็คโคร" → group "04 - ซีพี แอ็กซ์ตร้า(Makro)"
    - taxid 0107536000633 with "คลังครอสด็อคธัญบุรี 00485" → customercode "0115526"
    - taxid 0107536000633 headquarters → customercode "0102856"
    - taxid 0105540016253 (City Mall / ซิตี้มอลล์) with branch 00001 → customercode "0114682"
-   - taxid 0105565017547 (บริษัท ออล สปีดดี้ / All Speedy) → treat as ซีพี ออลล์, use customergroup "07 - เซเว่นอีเลฟเว่น (7-11)" and customercode from the ซีพี ออลล์ row in the Customer Master
+   - taxid 0105565017547 (บริษัท ออล สปีดดี้ / All Speedy) → treat as ซีพี ออลล์, use customergroup "07 - เซเว่นอีเลฟเว่น (7-11)" and customercode from the ซีพี ออลล์ row
 4. Copy customergroup and customercode EXACTLY from the matching Customer Master row.
 
-HOW TO MAP vendor_customercode:
-MEANING: The code the VENDOR gave to OUR COMPANY (สหพัฒนพิบูล) to identify us as their customer.
-
-RULE A — COMPANY NAME HEADER WINS ABSOLUTELY:
-Scan the line(s) that contain the vendor company name (ชื่อผู้ขาย/บริษัท at the top of the invoice).
-If that line contains a number inside [square brackets] or (parentheses), that number IS vendor_customercode.
-  บริษัท บิวเทรี่ยม จำกัด สำนักงานใหญ่ [321801]       → "321801"
-  บริษัท เซ็นทรัล ฟู้ด วิเทา จำกัด สำนักงานใหญ่ (040101) → "040101"
-  บริษัท ซีเอฟดับบลิว จำกัด (040201)                   → "040201"
-  บริษัท ซีเอ็มเค จำกัด (042501)                       → "042501"
-When RULE A applies: output that number. IGNORE every other code found anywhere else on the invoice (including fields labelled รหัสร้านค้า, Supplier Code, or any hyphenated code like "BTM-MC15009"). Those other codes are irrelevant when the company name block already has one.
-
-RULE B — FALLBACK (only when company name block has NO bracketed/parenthesised number):
-- "A/C No" field → Foodland
-- "Vendor No" field → PTT
-- Field labels: "รหัสร้านค้า", "Customer Code", "Supplier Code", "เจ้าของ/ตัวแทน(รหัสร้านค้า)"
-- Big C: 7-digit code next to our company name
-- CP All / 7-11: supplier code
-- Strip vendor-prefix from hyphenated codes: e.g. "TOP-M802316" → "802316"; "CFW-M900548" → "900548"
-- Same-address fallback: if code missing but same-address vendor in document has one, reuse it.
-- Leave BLANK ("") for: โฮมโปร/HomePro, โลตัส/Lotus/LT, แม็คโคร/Makro, TFG/ไทยฟู้ดกรุ๊ป, วิลล่า/Villa Market, วัตสัน/Watson/Watsons
-
-HOW TO MAP vendor_branch:
-- Look ONLY for an explicitly labelled branch code: "สาขาที่ [code]", "Branch", "Site code".
-- "Group [number]" is NOT a branch code — ignore it completely.
-- Use the branch code exactly as printed (e.g. "00485", "29130").
-- If NO explicitly labelled branch code is found, return blank "" — do NOT guess, do NOT invent "00000".
-- Leave BLANK ("") for these vendors: วิลล่า / Villa Market, วัตสัน / Watson / Watsons
+CUSTOMER-SPECIFIC INSTRUCTIONS (these are tailored to this invoice — follow them precisely):
+${customerSection}
 
 Given raw text from one or more invoice pages (separated by "--- PAGE BREAK ---"), extract ALL invoice line items and return a JSON array. Each element = one row.
 
@@ -76,18 +51,14 @@ Output fields (22 columns):
 - customergroup: from Customer Master lookup (exact copy)
 - customercode: from Customer Master lookup (exact copy)
 - taxid: the invoice ISSUER's 13-digit tax ID
-- vendor_customercode: our code in vendor's system (strip text prefixes, keep numbers)
-- vendor_branch: vendor branch/group code for our transactions
+- vendor_customercode: see CUSTOMER-SPECIFIC INSTRUCTIONS above
+- vendor_branch: see CUSTOMER-SPECIFIC INSTRUCTIONS above
 - vendor_expensecode: expense code if present, else ""
 - vendor_expensegroup: expense group if present, else ""
 - divisionsale: always return "" (not used yet)
 - invoiceno: invoice number / เลขที่
-- invoicedate: invoice date → YYYY-MM-DD. Date conversion rules:
-  * 4-digit year ≥ 2500 = Buddhist Era → subtract 543 (e.g., 2569 → 2026)
-  * 4-digit year < 2500 = already Gregorian → use as-is (e.g., 2026 → 2026)
-  * 2-digit year = Gregorian short form → prepend "20" (e.g., "26" → 2026, "30/04/26" → 2026-04-30)
-  * DO NOT subtract 543 from 2-digit years
-- duedate: due/payment date → YYYY-MM-DD (same conversion rules as invoicedate)
+- invoicedate: invoice date → YYYY-MM-DD (see date rules below)
+- duedate: due/payment date → YYYY-MM-DD (see date rules below)
 - description: main invoice description / purpose line
 - product_description: product or service line item detail
 - amount: amount before deductions (plain number, no commas)
@@ -99,19 +70,16 @@ Output fields (22 columns):
 - netamount: net payable after all deductions (number)
 - remark: any notes / หมายเหตุ
 
-Rules:
+General rules (apply to every invoice):
 - Multiple line items per invoice → one row per item (share header: invoiceno, taxid, dates, etc.)
 - Missing fields → empty string ""
 - Numbers → plain string without commas or currency symbols
-- Dates → YYYY-MM-DD; 4-digit year ≥ 2500 = Buddhist Era → subtract 543; 2-digit year = prepend "20" (never subtract 543)
 - Tax ID = exactly 13 digits
-- NEVER calculate or derive any tax/VAT amount — only copy figures that are explicitly printed on the invoice; if not printed, use "0"
-- invoiceno: OCR often inserts spaces within invoice numbers — reconstruct by removing spaces between digit groups around slashes (e.g. "3530103 / 010426" or "3 530103/010426" or "353 0103 /01 0426" → all become "3530103/010426"); extract EVERY invoice number that appears in the document, do NOT skip any
-- Extract ALL line items from ALL invoices present in the document — never skip an invoice because its number looks unusual or has spacing
-- product_description: copy the EXACT characters from the invoice verbatim. Do NOT paraphrase, translate, summarise, "correct", or substitute ANY Thai word — even if the printed text looks wrong or unusual, output it exactly as-is. Example: invoice prints "ค่ากระจายสินค้า dc fee" → output EXACTLY "ค่ากระจายสินค้า dc fee", never "ค่าบริหารจัดการ (DC Fee)" or any reworded version.
-- product_description: preserve ALL languages as printed; include both Thai and English when both appear (e.g. "ส่วนลด Discount" not just "Discount")
-- Boots invoices: each line item may have a VAT marker column next to the amount ('V' = VAT 7%, 'N' = Non-VAT); if marker is 'V' read the corresponding VAT amount from the invoice into vat_7; if 'N' set vat_7 = "0"
-- CFR invoices: remark field = full concatenated text from the "หมายเหตุ" section through the "สำหรับร้านค้า" section as printed
+- Dates → YYYY-MM-DD. 4-digit year ≥ 2500 = Buddhist Era → subtract 543 (e.g. 2569 → 2026).
+  4-digit year < 2500 = already Gregorian → use as-is. 2-digit year → prepend "20" (never subtract 543).
+- NEVER calculate or derive any tax/VAT amount — only copy figures that are explicitly printed on the invoice; if not printed, use "0".
+- invoiceno: OCR may insert spaces inside invoice numbers — reconstruct by removing spaces between digit groups around slashes (e.g. "3530103 / 010426" → "3530103/010426"). Extract EVERY invoice in the document; never skip one because its number looks unusual.
+- product_description: copy the EXACT characters verbatim. Do NOT paraphrase, translate, summarise, "correct", or substitute any Thai word — output it exactly as printed. Preserve all languages; include both Thai and English when both appear (e.g. "ส่วนลด Discount").
 - Return ONLY a valid JSON array, no markdown fences, no explanation`
 }
 
@@ -128,30 +96,31 @@ function parseJsonFromText(text: string): object[] {
   return Array.isArray(parsed) ? parsed : [parsed]
 }
 
-// Vendors where vendor_customercode must always be blank
+// Vendors where vendor_customercode is always blank — guard for the case where
+// customer detection failed but the invoice still belongs to one of them.
 const BLANK_VENDOR_CODE_NAMES = ['homepro', 'home product', 'lotus', 'makro', 'tfg', 'villa', 'watson']
 
-// Scan invoice text for [CODE] or (CODE) — our customer code in the vendor's system.
-// Two layouts seen in real invoices (verified against sample PDFs):
-//   A) CMK / CFR — code on the ชื่อผู้ซื้อ (buyer) line, e.g. "...จำกัด ( 042501)"
-//   B) BTM / CFW — code right after the vendor company name header, e.g. "...สำนักงานใหญ่ [321801]"
-// Note: pdf.js joins all text with spaces (no real line breaks), and brackets may
-// contain inner spaces — hence the \s* in the pattern. Deterministic override:
-// the LLM reliably ignores prompt rules for this field.
-function extractHeaderVendorCode(invoiceText: string): string | null {
+// Deterministically extract vendor_customercode from the raw invoice text.
+// Two real layouts (verified against sample PDFs):
+//   buyer-line     — ( CODE ) on the ชื่อผู้ซื้อ line, e.g. "...จำกัด ( 042501)"  (CMK, CFR)
+//   header-bracket — [CODE] right after the vendor company name             (BTM, CFW)
+// pdf.js joins all text with spaces and brackets may contain inner spaces — hence \s*.
+function extractHeaderVendorCode(invoiceText: string, mode: 'buyer-line' | 'header-bracket' | 'auto'): string | null {
   const head = invoiceText.slice(0, 800)
-  if (BLANK_VENDOR_CODE_NAMES.some((n) => head.toLowerCase().includes(n))) return null
+  if (mode === 'auto' && BLANK_VENDOR_CODE_NAMES.some((n) => head.toLowerCase().includes(n))) return null
 
-  // Pattern A: code on the ชื่อผู้ซื้อ (buyer) line
-  const buyerIdx = invoiceText.search(/ชื่อผู้ซื้อ|ผู้ซื้อ/)
-  if (buyerIdx >= 0) {
-    const m = invoiceText.slice(buyerIdx, buyerIdx + 400).match(/[\[(]\s*(\d{4,8})\s*[\])]/)
-    if (m) return m[1]
+  if (mode === 'buyer-line' || mode === 'auto') {
+    const buyerIdx = invoiceText.search(/ชื่อผู้ซื้อ|ผู้ซื้อ/)
+    if (buyerIdx >= 0) {
+      const m = invoiceText.slice(buyerIdx, buyerIdx + 400).match(/[\[(]\s*(\d{4,8})\s*[\])]/)
+      if (m) return m[1]
+    }
   }
 
-  // Pattern B: code in the vendor company name header
-  const m2 = head.match(/[\[(]\s*(\d{4,8})\s*[\])]/)
-  if (m2) return m2[1]
+  if (mode === 'header-bracket' || mode === 'auto') {
+    const m2 = head.match(/[\[(]\s*(\d{4,8})\s*[\])]/)
+    if (m2) return m2[1]
+  }
 
   return null
 }
@@ -190,6 +159,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const truncated = text.length > 40000 ? text.slice(0, 40000) + '\n[truncated]' : text
 
+  // Identify the customer and build a prompt focused on that customer's rules.
+  const rule = detectCustomer(text, filename)
+  const customerSection = buildCustomerInstructions(rule)
+
   try {
     const apiRes = await fetch(OPENROUTER_URL, {
       method: 'POST',
@@ -200,7 +173,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       body: JSON.stringify({
         model: MODEL,
         messages: [
-          { role: 'system', content: buildSystemPrompt(customerMasterJson) },
+          { role: 'system', content: buildSystemPrompt(customerMasterJson, customerSection) },
           { role: 'user', content: `Filename: ${filename}\n\nInvoice text:\n\n${truncated}` },
         ],
         temperature: 0.1,
@@ -218,21 +191,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const data = await apiRes.json()
     const raw: string = data?.choices?.[0]?.message?.content || '[]'
 
-    let rows: object[]
+    let rows: Record<string, unknown>[]
     try {
-      rows = parseJsonFromText(raw)
+      rows = parseJsonFromText(raw) as Record<string, unknown>[]
     } catch {
       rows = []
     }
 
-    // Hard override: if the raw invoice text has [CODE] or (CODE) on a company name line,
-    // replace whatever the LLM put in vendor_customercode with that code.
-    const headerCode = extractHeaderVendorCode(text)
-    if (headerCode) {
-      rows = rows.map((r) => ({ ...(r as Record<string, unknown>), vendor_customercode: headerCode }))
+    // Config-driven post-processing — deterministic overrides per customer.
+    const codeSrc = rule?.vendorCode ?? 'auto'
+    if (codeSrc === 'blank') {
+      rows = rows.map((r) => ({ ...r, vendor_customercode: '' }))
+    } else if (codeSrc === 'buyer-line' || codeSrc === 'header-bracket' || codeSrc === 'auto') {
+      // 'ac-no' / 'vendor-no' are left to the LLM (those invoices are scanned/OCR'd)
+      const code = extractHeaderVendorCode(text, codeSrc)
+      if (code) rows = rows.map((r) => ({ ...r, vendor_customercode: code }))
     }
 
-    return res.status(200).json({ rows })
+    if (rule?.vendorBranch === 'blank') {
+      rows = rows.map((r) => ({ ...r, vendor_branch: '' }))
+    }
+
+    return res.status(200).json({ rows, customer: rule?.id ?? null })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     return res.status(500).json({ error: message })
