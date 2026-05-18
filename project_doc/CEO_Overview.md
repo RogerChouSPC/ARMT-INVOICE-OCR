@@ -48,8 +48,9 @@ No installation required. Works in any web browser.
 
 ### Step 2 — AI Processes
 The system automatically:
-- Reads the PDF (whether it is digital text or a scanned paper image)
-- Identifies the supplier from the company tax ID
+- Identifies which supplier the invoice is from
+- Applies that supplier's own set of reading rules (each supplier prints invoices differently)
+- Reads the PDF — whether it is digital text or a scanned paper image
 - Extracts all relevant fields
 - Maps the supplier to the correct internal customer code
 
@@ -83,9 +84,9 @@ Staff clicks **Download Excel** and receives a formatted spreadsheet with all ex
 
 The system currently supports all major suppliers:
 
-Makro · Lotus · Big C · 7-Eleven · The Mall · AEON · Central Food · Tops · Foodland · Watson · Boots · HomePro · PTT Jiffy · Tsuruha · CJ Express · MM Mega · Villa · and more
+Makro · Lotus · Big C · 7-Eleven · The Mall · AEON · Central Food (Retail / Wholesale) · Tops · Foodland · Watson · Boots · HomePro · PTT · Tsuruha · CJ Express · Beautrium · Villa · and more
 
-**Adding a new supplier takes less than 1 minute** — no developer involvement needed for standard cases.
+Each supplier's invoice format is tuned individually, so the system reads each one accurately even though every supplier lays out its invoices differently. **Adding a new supplier, or fine-tuning an existing one, is a small change** — one configuration entry, handled quickly by the developer (typically within a day, including testing).
 
 ---
 
