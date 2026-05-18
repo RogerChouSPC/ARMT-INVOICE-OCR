@@ -1,5 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { detectCustomer, buildCustomerInstructions } from '../src/config/customers'
+
+// Customer rules live in src/config/customers.ts (single source of truth, used by
+// the frontend). A Vercel serverless function cannot reliably import across the
+// src/ boundary at runtime (ERR_MODULE_NOT_FOUND), so the frontend detects the
+// customer and sends the resulting instructions + directives in the request body.
+
+const DEFAULT_CUSTOMER_SECTION = `DETECTED CUSTOMER: unknown — use general rules.
+vendor_customercode: a code in [brackets]/(parentheses) near the company name or ชื่อผู้ซื้อ line; otherwise a labelled รหัสร้านค้า / Customer Code. Strip vendor prefixes from hyphenated codes (e.g. "TOP-M802316" → "802316").
+vendor_branch: only an explicitly labelled branch ("สาขาที่", "Branch", "Site code"); "Group [number]" is NOT a branch; return "" if none found.`
 
 async function verifyAzureToken(authHeader: string | undefined): Promise<boolean> {
   if (!authHeader?.startsWith('Bearer ')) return false
@@ -142,11 +150,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   let text: string
   let filename: string
   let customerMasterJson: string
+  let customerSection: string
+  let vendorCode: string
+  let vendorBranch: string
   try {
     const body = req.body || {}
     text = (body.text || '').trim()
     filename = body.filename || ''
     if (!text) throw new Error('empty text')
+    customerSection = (body.customerInstructions || '').trim() || DEFAULT_CUSTOMER_SECTION
+    vendorCode = body.vendorCode || 'auto'
+    vendorBranch = body.vendorBranch || 'auto'
     const cm = body.customerMaster
     customerMasterJson = (Array.isArray(cm) && cm.length > 0)
       ? JSON.stringify(cm.map(({ store_name, customergroup, customercode, taxid }: {
@@ -158,10 +172,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const truncated = text.length > 40000 ? text.slice(0, 40000) + '\n[truncated]' : text
-
-  // Identify the customer and build a prompt focused on that customer's rules.
-  const rule = detectCustomer(text, filename)
-  const customerSection = buildCustomerInstructions(rule)
 
   try {
     const apiRes = await fetch(OPENROUTER_URL, {
@@ -199,20 +209,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Config-driven post-processing — deterministic overrides per customer.
-    const codeSrc = rule?.vendorCode ?? 'auto'
-    if (codeSrc === 'blank') {
+    if (vendorCode === 'blank') {
       rows = rows.map((r) => ({ ...r, vendor_customercode: '' }))
-    } else if (codeSrc === 'buyer-line' || codeSrc === 'header-bracket' || codeSrc === 'auto') {
+    } else if (vendorCode === 'buyer-line' || vendorCode === 'header-bracket' || vendorCode === 'auto') {
       // 'ac-no' / 'vendor-no' are left to the LLM (those invoices are scanned/OCR'd)
-      const code = extractHeaderVendorCode(text, codeSrc)
+      const code = extractHeaderVendorCode(text, vendorCode)
       if (code) rows = rows.map((r) => ({ ...r, vendor_customercode: code }))
     }
 
-    if (rule?.vendorBranch === 'blank') {
+    if (vendorBranch === 'blank') {
       rows = rows.map((r) => ({ ...r, vendor_branch: '' }))
     }
 
-    return res.status(200).json({ rows, customer: rule?.id ?? null })
+    return res.status(200).json({ rows })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     return res.status(500).json({ error: message })

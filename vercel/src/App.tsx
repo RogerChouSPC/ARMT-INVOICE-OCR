@@ -10,7 +10,7 @@ import CustomerMasterPage, { getCustomerMasterRows } from '@/components/Customer
 import CustomerCycle from '@/components/CustomerCycle'
 import BackgroundPaths from '@/components/BackgroundPaths'
 import { extractPdfText } from '@/utils/pdfTextExtractor'
-import { detectCustomer, shouldUseOcr } from '@/config/customers'
+import { detectCustomer, shouldUseOcr, buildCustomerInstructions } from '@/config/customers'
 import { renderPdfPages } from '@/utils/pdfRenderer'
 import { exportToExcel } from '@/utils/excelExporter'
 import type { InvoiceRow, FileProcessingStatus } from '@/types/invoice'
@@ -48,8 +48,15 @@ export default function App() {
         let extractedRows: Partial<InvoiceRow>[] = []
 
         // Per-customer config decides OCR vs direct text; falls back to auto-detection.
+        // The detected rule is sent to /api/extract so the API needs no config import.
         const customerRule = detectCustomer(pdfText, file.name)
         const useOcr = shouldUseOcr(customerRule, isDigital)
+        const customerPayload = {
+          customerId: customerRule?.id ?? null,
+          customerInstructions: buildCustomerInstructions(customerRule),
+          vendorCode: customerRule?.vendorCode ?? 'auto',
+          vendorBranch: customerRule?.vendorBranch ?? 'auto',
+        }
 
         if (!useOcr) {
           updateStatus(i, { state: 'extracting', progress: 50 })
@@ -57,7 +64,7 @@ export default function App() {
           const res = await fetch('/api/extract', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-            body: JSON.stringify({ text: pdfText, filename: file.name, customerMaster }),
+            body: JSON.stringify({ text: pdfText, filename: file.name, customerMaster, ...customerPayload }),
           })
           if (!res.ok) {
             const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
@@ -91,7 +98,7 @@ export default function App() {
           const extractRes = await fetch('/api/extract', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...(extractToken ? { Authorization: `Bearer ${extractToken}` } : {}) },
-            body: JSON.stringify({ text: ocrTexts.join('\n\n--- PAGE BREAK ---\n\n'), filename: file.name, customerMaster }),
+            body: JSON.stringify({ text: ocrTexts.join('\n\n--- PAGE BREAK ---\n\n'), filename: file.name, customerMaster, ...customerPayload }),
           })
           if (!extractRes.ok) {
             const err = await extractRes.json().catch(() => ({ error: `HTTP ${extractRes.status}` }))
