@@ -89,10 +89,11 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
   }
 
   const clearHistory = () => {
-    const snap = rows.map(r => ({ ...r }))
-    const json = JSON.stringify(snap)
-    setHistory([{ rows: snap, timestamp: new Date() }])
-    lastSnapshotJson.current = json
+    // Always keep history[0] (the original extraction) so the user can always revert to it
+    const original = history.length > 0 ? history[0] : { rows: rows.map(r => ({ ...r })), timestamp: new Date() }
+    setHistory([original])
+    // Reset to original's JSON so the next edit properly creates a new checkpoint
+    lastSnapshotJson.current = JSON.stringify(original.rows)
   }
 
   const fmt = (d: Date) =>
