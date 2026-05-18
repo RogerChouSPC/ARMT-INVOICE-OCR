@@ -130,9 +130,9 @@ export const CUSTOMER_RULES: CustomerRule[] = [
     label: 'The Mall',
     match: { filenameKeywords: ['themall'], nameKeywords: ['the mall', 'เดอะมอลล์'] },
     extractMode: 'ocr',
-    vendorCode: 'auto',
+    vendorCode: 'blank',
     vendorBranch: 'auto',
-    notes: 'product_description must include BOTH the Thai and English text as printed, e.g. "ส่วนลด Discount" — never drop the Thai part.',
+    notes: 'product_description must include BOTH the Thai and English text as printed, e.g. "ส่วนลด Discount" — never drop the Thai part. The code next to "ชื่อลูกค้า" is สหพัฒนพิบูล (our company) — never use it.',
   },
   {
     id: 'HOMEPRO',
