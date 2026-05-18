@@ -9,7 +9,7 @@ import TableSkeleton from '@/components/TableSkeleton'
 import CustomerMasterPage, { getCustomerMasterRows } from '@/components/CustomerMasterPage'
 import CustomerCycle from '@/components/CustomerCycle'
 import BackgroundPaths from '@/components/BackgroundPaths'
-import { extractPdfText } from '@/utils/pdfTextExtractor'
+import { extractPdfText, countPdfPages } from '@/utils/pdfTextExtractor'
 import { detectCustomer, shouldUseOcr, buildCustomerInstructions } from '@/config/customers'
 import { renderPdfPages } from '@/utils/pdfRenderer'
 import { exportToExcel } from '@/utils/excelExporter'
@@ -25,6 +25,7 @@ export default function App() {
   const [statuses, setStatuses]         = useState<FileProcessingStatus[]>([])
   const [rows, setRows]                 = useState<InvoiceRow[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
+  const [pageStats, setPageStats]       = useState({ done: 0, total: 0 })
 
   // All hooks must be declared before any conditional return
   const updateStatus = useCallback(
@@ -40,8 +41,17 @@ export default function App() {
     const newRows: InvoiceRow[] = []
     const customerMaster = getCustomerMasterRows()
 
+    // Pre-count pages across all files for the "done/total" progress display.
+    const pageCounts: number[] = []
+    for (const file of files) {
+      try { pageCounts.push(await countPdfPages(file)) }
+      catch { pageCounts.push(1) }
+    }
+    setPageStats({ done: 0, total: pageCounts.reduce((a, b) => a + b, 0) })
+
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
+      const pagesBefore = pageCounts.slice(0, i).reduce((a, b) => a + b, 0)
       try {
         updateStatus(i, { state: 'rendering', progress: 15 })
         const { text: pdfText, isDigital, pageCount } = await extractPdfText(file)
@@ -94,6 +104,7 @@ export default function App() {
             const { text } = await ocrRes.json()
             ocrDone++
             updateStatus(i, { progress: 60 + (ocrDone / pages.length) * 20 })
+            setPageStats((s) => ({ ...s, done: pagesBefore + ocrDone }))
             return text as string
           }))
           updateStatus(i, { state: 'extracting', progress: 80 })
@@ -120,6 +131,9 @@ export default function App() {
         const msg = err instanceof Error ? err.message : 'Unknown error'
         updateStatus(i, { state: 'error', progress: 0, error: msg })
         console.error(`${file.name}:`, msg)
+      } finally {
+        // Ensure every page of this file is counted once the file finishes.
+        setPageStats((s) => ({ ...s, done: Math.max(s.done, pagesBefore + pageCounts[i]) }))
       }
     }
 
@@ -142,7 +156,7 @@ export default function App() {
 
   if (!user) return <LoginPage initError={error} isLoading={loading} />
 
-  const clearAll = () => { setRows([]); setStatuses([]) }
+  const clearAll = () => { setRows([]); setStatuses([]); setPageStats({ done: 0, total: 0 }) }
 
   const allDone = statuses.length > 0 && statuses.every((s) => s.state === 'done' || s.state === 'error')
 
@@ -201,7 +215,7 @@ export default function App() {
             )}
 
             <UploadZone onFiles={processFiles} disabled={isProcessing} />
-            <ProcessingStatus items={statuses} />
+            <ProcessingStatus items={statuses} pageStats={pageStats} />
 
             {isProcessing && rows.length === 0 && <TableSkeleton />}
 

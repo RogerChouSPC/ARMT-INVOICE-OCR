@@ -23,9 +23,12 @@ const STATE_COLORS: Record<string, string> = {
 const isProcessing = (state: string) =>
   state !== 'idle' && state !== 'done' && state !== 'error'
 
-interface Props { items: FileProcessingStatus[] }
+interface Props {
+  items: FileProcessingStatus[]
+  pageStats: { done: number; total: number }
+}
 
-export default function ProcessingStatus({ items }: Props) {
+export default function ProcessingStatus({ items, pageStats }: Props) {
   const [previewFile, setPreviewFile] = useState<File | null>(null)
 
   if (items.length === 0) return null
@@ -33,7 +36,14 @@ export default function ProcessingStatus({ items }: Props) {
   return (
     <>
       <div className="card p-5 animate-slide-up">
-        <h2 className="text-sm font-semibold text-foreground mb-4">Processing</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-semibold text-foreground">Processing</h2>
+          {pageStats.total > 0 && (
+            <span className="text-sm font-semibold text-primary tabular-nums">
+              {pageStats.done}/{pageStats.total}
+            </span>
+          )}
+        </div>
         <div className="flex flex-col gap-3">
           {items.map((item, i) => (
             <div key={i}>

@@ -6,6 +6,13 @@ export interface PdfTextResult {
   isDigital: boolean
 }
 
+/** Quickly read a PDF's page count (metadata only — no text extraction). */
+export async function countPdfPages(file: File): Promise<number> {
+  const arrayBuffer = await file.arrayBuffer()
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+  return pdf.numPages
+}
+
 /**
  * Extract text directly from a PDF using PDF.js.
  * Returns isDigital=true when enough text is found (>100 non-space chars per page).
