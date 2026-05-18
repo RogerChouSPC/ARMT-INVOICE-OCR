@@ -17,7 +17,7 @@ export type ExtractMode = 'auto' | 'ocr' | 'text'
 // Where vendor_customercode (the code the vendor assigned to OUR company) is found:
 //   'buyer-line'     — ( CODE ) on the ชื่อผู้ซื้อ line          (CMK, CFR)
 //   'header-bracket' — [CODE] / (CODE) after the company name    (BTM, CFW)
-//   'ac-no'          — value of the "A/C No" field               (Foodland)
+//   'ac-no'          — value of the "A/C No" field
 //   'vendor-no'      — value of the "Vendor No" field            (PTT)
 //   'blank'          — always empty                              (HomePro, LT, ...)
 //   'auto'           — try buyer-line, then header-bracket        (default)
@@ -61,7 +61,7 @@ export const CUSTOMER_RULES: CustomerRule[] = [
     label: 'Central Food (CFM)',
     match: { filenameKeywords: ['cfm'] },
     extractMode: 'ocr',
-    vendorCode: 'auto',
+    vendorCode: 'blank',
     vendorBranch: 'blank',
   },
   {
@@ -94,7 +94,7 @@ export const CUSTOMER_RULES: CustomerRule[] = [
     label: 'Boots',
     match: { filenameKeywords: ['boots'], nameKeywords: ['บู๊ทส์'] },
     extractMode: 'ocr',
-    vendorCode: 'auto',
+    vendorCode: 'blank',
     vendorBranch: 'auto',
     notes: 'Each line item has a VAT marker column next to the amount: "V" = VAT 7%, "N" = Non-VAT. When the marker is "V", put that line\'s VAT amount into vat_7. When "N", set vat_7 = "0".',
   },
@@ -112,9 +112,8 @@ export const CUSTOMER_RULES: CustomerRule[] = [
     label: 'Foodland',
     match: { filenameKeywords: ['foodland'], nameKeywords: ['foodland', 'ฟู้ดแลนด์'] },
     extractMode: 'ocr',
-    vendorCode: 'ac-no',
+    vendorCode: 'blank',
     vendorBranch: 'auto',
-    notes: 'vendor_customercode = the value printed in the "A/C No" field.',
   },
   {
     id: 'PTT',
@@ -183,6 +182,14 @@ export const CUSTOMER_RULES: CustomerRule[] = [
     vendorBranch: 'blank',
   },
   {
+    id: 'TSURUHA',
+    label: 'Tsuruha',
+    match: { filenameKeywords: ['tsuruha'], nameKeywords: ['tsuruha', 'ซูรูฮะ'] },
+    extractMode: 'ocr',
+    vendorCode: 'blank',
+    vendorBranch: 'auto',
+  },
+  {
     id: 'BIGC_FOOD',
     label: 'Big C Food Service',
     match: { nameKeywords: ['บิ๊กซี ฟู๊ด', 'big c food service', 'bigc food'] },
@@ -190,6 +197,14 @@ export const CUSTOMER_RULES: CustomerRule[] = [
     vendorCode: 'blank',
     vendorBranch: 'auto',
     notes: 'vendor_customercode is always blank. Any numeric code on the invoice such as "00000" is the vendor_branch, not the vendor_customercode.',
+  },
+  {
+    id: 'BIGC',
+    label: 'Big C',
+    match: { nameKeywords: ['บิ๊กซีซูเปอร์เซ็นเตอร์', 'big c supercenter'] },
+    extractMode: 'auto',
+    vendorCode: 'blank',
+    vendorBranch: 'auto',
   },
 ]
 
