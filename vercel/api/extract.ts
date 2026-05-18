@@ -127,6 +127,25 @@ function parseJsonFromText(text: string): object[] {
   return Array.isArray(parsed) ? parsed : [parsed]
 }
 
+// Vendors where vendor_customercode must always be blank
+const BLANK_VENDOR_CODE_NAMES = ['โฮมโปร', 'homepro', 'โลตัส', 'lotus', 'แม็คโคร', 'makro', 'tfg', 'ไทยฟู้ด', 'วิลล่า', 'villa', 'วัตสัน', 'watson', 'watsons']
+
+// Scan the first 50 lines of invoice text for [CODE] or (CODE) on a company name line.
+// This is a deterministic override — the LLM often ignores prompt rules for this field.
+function extractHeaderVendorCode(invoiceText: string): string | null {
+  const lines = invoiceText.split(/\r?\n/).slice(0, 50)
+  for (const line of lines) {
+    if (/บริษัท|จำกัด|ห้างหุ้นส่วน/.test(line)) {
+      // skip if this looks like a "leave blank" vendor
+      const lower = line.toLowerCase()
+      if (BLANK_VENDOR_CODE_NAMES.some(n => lower.includes(n))) continue
+      const match = line.match(/[\[(](\d{4,8})[\])]/)
+      if (match) return match[1]
+    }
+  }
+  return null
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' })
@@ -194,6 +213,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       rows = parseJsonFromText(raw)
     } catch {
       rows = []
+    }
+
+    // Hard override: if the raw invoice text has [CODE] or (CODE) on a company name line,
+    // replace whatever the LLM put in vendor_customercode with that code.
+    const headerCode = extractHeaderVendorCode(text)
+    if (headerCode) {
+      rows = rows.map((r) => ({ ...(r as Record<string, unknown>), vendor_customercode: headerCode }))
     }
 
     return res.status(200).json({ rows })
