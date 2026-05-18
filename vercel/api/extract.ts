@@ -42,19 +42,25 @@ HOW TO MAP customergroup and customercode:
 4. Copy customergroup and customercode EXACTLY from the matching Customer Master row.
 
 HOW TO MAP vendor_customercode:
-Search in this priority order:
-1. Bracket or parenthesis pattern appended to the vendor/company name: "Company Name [CODE]" or "Company Name (CODE)" → extract CODE only (digits).
-   e.g. "บริษัท บิวเทรี่ยม จำกัด สำนักงานใหญ่ [321801]" → "321801"
-   e.g. "CFR (040101)" → "040101" ; "CFW (040201)" → "040201" ; "CMK (042501)" → "042501"
-   This pattern takes highest priority — always check the company name line first.
-2. Field labels: "รหัสร้านค้า", "Customer Code", "Supplier Code", "ชื่อลูกค้า [CODE]", "เจ้าของ/ตัวแทน(รหัสร้านค้า)"
-3. "A/C No" field (Foodland invoices)
-4. "Vendor No" field (PTT invoices)
-5. Big C: 7-digit code next to our company name (e.g. 4000047…)
-6. CP All / 7-11: supplier code (e.g. 2000087)
-- Strip text prefixes: "BTM-MC15009" → "15009"; "TOP-M802316" → "802316"; "CFW-M900548" → "900548"
-- If the vendor code is missing for a vendor but another entry in the SAME document has the same address (street/building), reuse that code.
-- Leave BLANK ("") for these vendors: โฮมโปร / HomePro, โลตัส / Lotus / LT, แม็คโคร / Makro, TFG / ไทยฟู้ดกรุ๊ป, วิลล่า / Villa Market, วัตสัน / Watson / Watsons
+MEANING: This is the code that the VENDOR (invoice issuer) assigns to OUR COMPANY (สหพัฒนพิบูล) in their own system. We are their customer, so they gave us a customer code.
+
+*** STEP 1 — COMPANY NAME BLOCK (MANDATORY FIRST CHECK) ***
+Look at the vendor's company name block at the TOP of the invoice for a code in [brackets] or (parentheses) immediately after the company name. This is the vendor's customer code for us.
+  "บริษัท บิวเทรี่ยม จำกัด สำนักงานใหญ่ [321801]"      → vendor_customercode = "321801"
+  "บริษัท เซ็นทรัล ฟู้ด วิเทา จำกัด สำนักงานใหญ่ (040101)" → vendor_customercode = "040101"
+  "บริษัท ซีเอฟดับบลิว จำกัด (040201)"                  → vendor_customercode = "040201"
+  "บริษัท ซีเอ็มเค จำกัด (042501)"                      → vendor_customercode = "042501"
+IF A CODE IS FOUND IN STEP 1 → USE IT. DO NOT look anywhere else. DO NOT replace it with any other number found elsewhere on the invoice.
+
+*** STEP 2 — FALLBACK SOURCES (only if Step 1 found nothing) ***
+- Field labels: "รหัสร้านค้า", "Customer Code", "Supplier Code", "เจ้าของ/ตัวแทน(รหัสร้านค้า)"
+- "A/C No" field → use for Foodland invoices
+- "Vendor No" field → use for PTT invoices
+- Big C: 7-digit code next to our company name (e.g. 4000047…)
+- CP All / 7-11: supplier code (e.g. 2000087)
+- Strip text prefixes from any found code: "BTM-MC15009" → "15009"; "TOP-M802316" → "802316"
+- If code is still missing but another vendor in the SAME document shares the same address, reuse that code.
+- Leave BLANK ("") for: โฮมโปร/HomePro, โลตัส/Lotus/LT, แม็คโคร/Makro, TFG/ไทยฟู้ดกรุ๊ป, วิลล่า/Villa Market, วัตสัน/Watson/Watsons
 
 HOW TO MAP vendor_branch:
 - Look for: "Group [number]", "สาขาที่ [code]", "Branch", "Site code", or branch number in company header.
