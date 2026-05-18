@@ -1,6 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { InvoiceRow } from '@/types/invoice'
 import { INVOICE_COLUMNS } from '@/types/invoice'
+
+interface Snapshot {
+  rows: InvoiceRow[]
+  timestamp: Date
+}
 
 interface Props {
   rows: InvoiceRow[]
@@ -10,6 +15,26 @@ interface Props {
 export default function ResultsTable({ rows, onUpdate }: Props) {
   const [editCell, setEditCell] = useState<{ row: number; col: keyof InvoiceRow } | null>(null)
   const [fullscreen, setFullscreen] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
+  const [history, setHistory] = useState<Snapshot[]>([])
+  const initialSaved = useRef(false)
+  const lastSnapshotJson = useRef('')
+
+  // Save initial snapshot when rows first arrive; reset when cleared
+  useEffect(() => {
+    if (rows.length === 0) {
+      initialSaved.current = false
+      lastSnapshotJson.current = ''
+      setHistory([])
+      return
+    }
+    if (!initialSaved.current) {
+      const snap = rows.map(r => ({ ...r }))
+      setHistory([{ rows: snap, timestamp: new Date() }])
+      lastSnapshotJson.current = JSON.stringify(snap)
+      initialSaved.current = true
+    }
+  }, [rows.length]) // intentional: only react to count changes, not cell edits
 
   useEffect(() => {
     if (!fullscreen) return
@@ -20,20 +45,53 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
 
   if (rows.length === 0) return null
 
+  const pushSnapshot = () => {
+    const json = JSON.stringify(rows)
+    if (json === lastSnapshotJson.current) return
+    lastSnapshotJson.current = json
+    setHistory(prev => [...prev, { rows: rows.map(r => ({ ...r })), timestamp: new Date() }])
+  }
+
   const updateCell = (rowIdx: number, col: keyof InvoiceRow, value: string) => {
-    const updated = rows.map((r, i) => (i === rowIdx ? { ...r, [col]: value } : r))
-    onUpdate(updated)
+    onUpdate(rows.map((r, i) => (i === rowIdx ? { ...r, [col]: value } : r)))
   }
 
   const deleteRow = (idx: number) => {
+    pushSnapshot()
     onUpdate(rows.filter((_, i) => i !== idx))
   }
+
+  const handleCellClick = (rowIdx: number, col: keyof InvoiceRow) => {
+    pushSnapshot()
+    setEditCell({ row: rowIdx, col })
+  }
+
+  const restoreVersion = (snap: Snapshot) => {
+    onUpdate(snap.rows.map(r => ({ ...r })))
+  }
+
+  const clearHistory = () => {
+    const snap = rows.map(r => ({ ...r }))
+    const json = JSON.stringify(snap)
+    setHistory([{ rows: snap, timestamp: new Date() }])
+    lastSnapshotJson.current = json
+  }
+
+  const fmt = (d: Date) =>
+    d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+
+  const tableWrapClass = fullscreen
+    ? 'flex-1 min-w-0 overflow-auto'
+    : showHistory
+      ? 'table-container flex-1 min-w-0'
+      : 'table-container'
 
   return (
     <div className={fullscreen
       ? 'fixed inset-0 z-50 bg-background flex flex-col'
       : 'card overflow-hidden animate-slide-up'
     }>
+      {/* Header */}
       <div className="px-5 py-4 border-b border-border flex items-center justify-between shrink-0">
         <h2 className="text-sm font-medium text-foreground">
           Extracted Data
@@ -41,6 +99,24 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
         </h2>
         <div className="flex items-center gap-3">
           <span className="text-xs text-muted-foreground">{rows.length} rows · 22 columns</span>
+
+          {/* Version history toggle */}
+          {history.length > 0 && (
+            <button
+              onClick={() => setShowHistory(v => !v)}
+              title="Version history"
+              className={`p-1.5 rounded hover:bg-muted transition-colors flex items-center gap-1 ${
+                showHistory ? 'text-primary bg-muted/60' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
+                <path d="M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0 0 13 21a9 9 0 0 0 0-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z" />
+              </svg>
+              <span className="text-xs font-medium">{history.length}</span>
+            </button>
+          )}
+
+          {/* Fullscreen toggle */}
           <button
             onClick={() => setFullscreen(v => !v)}
             title={fullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen'}
@@ -59,76 +135,121 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
         </div>
       </div>
 
-      <div className={fullscreen ? 'flex-1 overflow-auto' : 'table-container'}>
-        <table className="w-full text-xs border-collapse">
-          <thead>
-            <tr className="bg-google-blue-light">
-              <th className="px-3 py-2.5 text-left font-medium text-muted-foreground border-b border-border whitespace-nowrap w-10" />
-              {INVOICE_COLUMNS.map((col) => (
-                <th
-                  key={col.key}
-                  className="px-3 py-2.5 text-left font-medium text-muted-foreground border-b border-border whitespace-nowrap"
-                  style={{ minWidth: col.width }}
-                >
-                  {col.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, rowIdx) => (
-              <tr
-                key={rowIdx}
-                className="border-b border-border hover:bg-muted/40 transition-colors group"
-              >
-                {/* Delete button */}
-                <td className="px-2 py-1.5 text-center">
-                  <button
-                    onClick={() => deleteRow(rowIdx)}
-                    className="w-5 h-5 rounded text-muted-foreground/30 hover:text-destructive hover:bg-destructive/10 transition-colors opacity-0 group-hover:opacity-100 flex items-center justify-center"
-                    title="Delete row"
+      {/* Body: table + optional history sidebar */}
+      <div className={`flex ${fullscreen ? 'flex-1 overflow-hidden' : ''}`}>
+        <div className={tableWrapClass}>
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr className="bg-google-blue-light">
+                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground border-b border-border whitespace-nowrap w-10" />
+                {INVOICE_COLUMNS.map((col) => (
+                  <th
+                    key={col.key}
+                    className="px-3 py-2.5 text-left font-medium text-muted-foreground border-b border-border whitespace-nowrap"
+                    style={{ minWidth: col.width }}
                   >
-                    <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current">
-                      <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-                    </svg>
-                  </button>
-                </td>
-
-                {INVOICE_COLUMNS.map((col) => {
-                  const isEditing = editCell?.row === rowIdx && editCell?.col === col.key
-                  const value = String(row[col.key] ?? '')
-                  return (
-                    <td
-                      key={col.key}
-                      className={`px-1.5 py-1 ${isEditing ? 'bg-google-blue-light ring-1 ring-google-blue ring-inset rounded' : ''}`}
-                      onClick={() => setEditCell({ row: rowIdx, col: col.key })}
-                    >
-                      {isEditing ? (
-                        <input
-                          autoFocus
-                          className="input-cell"
-                          value={value}
-                          onChange={(e) => updateCell(rowIdx, col.key, e.target.value)}
-                          onBlur={() => setEditCell(null)}
-                          onKeyDown={(e) => e.key === 'Escape' && setEditCell(null)}
-                          style={{ minWidth: col.width - 12 }}
-                        />
-                      ) : (
-                        <span
-                          className={`block truncate px-1 py-0.5 rounded cursor-text ${value ? 'text-foreground' : 'text-muted-foreground/40 italic'}`}
-                          style={{ maxWidth: col.width - 12 }}
-                          title={value}
-                        >
-                          {value || '—'}
-                        </span>
-                      )}
-                    </td>
-                  )
-                })}
+                    {col.label}
+                  </th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.map((row, rowIdx) => (
+                <tr
+                  key={rowIdx}
+                  className="border-b border-border hover:bg-muted/40 transition-colors group"
+                >
+                  <td className="px-2 py-1.5 text-center">
+                    <button
+                      onClick={() => deleteRow(rowIdx)}
+                      className="w-5 h-5 rounded text-muted-foreground/30 hover:text-destructive hover:bg-destructive/10 transition-colors opacity-0 group-hover:opacity-100 flex items-center justify-center"
+                      title="Delete row"
+                    >
+                      <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current">
+                        <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+                      </svg>
+                    </button>
+                  </td>
+
+                  {INVOICE_COLUMNS.map((col) => {
+                    const isEditing = editCell?.row === rowIdx && editCell?.col === col.key
+                    const value = String(row[col.key] ?? '')
+                    return (
+                      <td
+                        key={col.key}
+                        className={`px-1.5 py-1 ${isEditing ? 'bg-google-blue-light ring-1 ring-google-blue ring-inset rounded' : ''}`}
+                        onClick={() => handleCellClick(rowIdx, col.key)}
+                      >
+                        {isEditing ? (
+                          <input
+                            autoFocus
+                            className="input-cell"
+                            value={value}
+                            onChange={(e) => updateCell(rowIdx, col.key, e.target.value)}
+                            onBlur={() => setEditCell(null)}
+                            onKeyDown={(e) => e.key === 'Escape' && setEditCell(null)}
+                            style={{ minWidth: col.width - 12 }}
+                          />
+                        ) : (
+                          <span
+                            className={`block truncate px-1 py-0.5 rounded cursor-text ${value ? 'text-foreground' : 'text-muted-foreground/40 italic'}`}
+                            style={{ maxWidth: col.width - 12 }}
+                            title={value}
+                          >
+                            {value || '—'}
+                          </span>
+                        )}
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Version history sidebar */}
+        {showHistory && (
+          <div className={`w-48 shrink-0 border-l border-border overflow-y-auto bg-background flex flex-col ${fullscreen ? '' : 'max-h-[60vh]'}`}>
+            <div className="px-3 py-2.5 border-b border-border flex items-center justify-between shrink-0">
+              <span className="text-xs font-semibold text-foreground">History</span>
+              <button
+                onClick={clearHistory}
+                className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+              >
+                Clear
+              </button>
+            </div>
+
+            <div className="flex flex-col">
+              {/* Current state — not clickable */}
+              <div
+                className="px-3 py-2.5 border-b border-border bg-primary/5"
+                style={{ borderLeft: '2px solid hsl(var(--primary))' }}
+              >
+                <div className="text-xs font-medium text-primary">Current</div>
+                <div className="text-xs text-muted-foreground mt-0.5">{rows.length} rows</div>
+              </div>
+
+              {/* Past snapshots — newest first, each clickable to restore */}
+              {[...history].reverse().map((snap, i) => {
+                const isOriginal = i === history.length - 1
+                return (
+                  <button
+                    key={i}
+                    onClick={() => restoreVersion(snap)}
+                    className="px-3 py-2.5 text-left border-b border-border hover:bg-muted transition-colors flex flex-col gap-0.5 w-full"
+                  >
+                    <span className="text-xs text-foreground">
+                      {isOriginal ? 'Original extraction' : fmt(snap.timestamp)}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{snap.rows.length} rows</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
