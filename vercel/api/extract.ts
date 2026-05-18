@@ -64,7 +64,8 @@ RULE B — FALLBACK (only when company name block has NO bracketed/parenthesised
 - Leave BLANK ("") for: โฮมโปร/HomePro, โลตัส/Lotus/LT, แม็คโคร/Makro, TFG/ไทยฟู้ดกรุ๊ป, วิลล่า/Villa Market, วัตสัน/Watson/Watsons
 
 HOW TO MAP vendor_branch:
-- Look ONLY for an explicitly labelled branch code: "Group [number]", "สาขาที่ [code]", "Branch", "Site code".
+- Look ONLY for an explicitly labelled branch code: "สาขาที่ [code]", "Branch", "Site code".
+- "Group [number]" is NOT a branch code — ignore it completely.
 - Use the branch code exactly as printed (e.g. "00485", "29130").
 - If NO explicitly labelled branch code is found, return blank "" — do NOT guess, do NOT invent "00000".
 - Leave BLANK ("") for these vendors: วิลล่า / Villa Market, วัตสัน / Watson / Watsons
@@ -79,7 +80,7 @@ Output fields (22 columns):
 - vendor_branch: vendor branch/group code for our transactions
 - vendor_expensecode: expense code if present, else ""
 - vendor_expensegroup: expense group if present, else ""
-- divisionsale: division or sale code if present, else ""
+- divisionsale: always return "" (not used yet)
 - invoiceno: invoice number / เลขที่
 - invoicedate: invoice date → YYYY-MM-DD. Date conversion rules:
   * 4-digit year ≥ 2500 = Buddhist Era → subtract 543 (e.g., 2569 → 2026)
@@ -107,7 +108,7 @@ Rules:
 - NEVER calculate or derive any tax/VAT amount — only copy figures that are explicitly printed on the invoice; if not printed, use "0"
 - invoiceno: OCR often inserts spaces within invoice numbers — reconstruct by removing spaces between digit groups around slashes (e.g. "3530103 / 010426" or "3 530103/010426" or "353 0103 /01 0426" → all become "3530103/010426"); extract EVERY invoice number that appears in the document, do NOT skip any
 - Extract ALL line items from ALL invoices present in the document — never skip an invoice because its number looks unusual or has spacing
-- product_description: copy the EXACT text from the invoice verbatim — do NOT paraphrase, summarise, or substitute Thai terms (e.g. invoice says "ค่ากระจายสินค้า dc fee" → output that exactly, NOT "ค่าบริหารจัดการ (DC Fee)")
+- product_description: copy the EXACT characters from the invoice verbatim. Do NOT paraphrase, translate, summarise, "correct", or substitute ANY Thai word — even if the printed text looks wrong or unusual, output it exactly as-is. Example: invoice prints "ค่ากระจายสินค้า dc fee" → output EXACTLY "ค่ากระจายสินค้า dc fee", never "ค่าบริหารจัดการ (DC Fee)" or any reworded version.
 - product_description: preserve ALL languages as printed; include both Thai and English when both appear (e.g. "ส่วนลด Discount" not just "Discount")
 - Boots invoices: each line item may have a VAT marker column next to the amount ('V' = VAT 7%, 'N' = Non-VAT); if marker is 'V' read the corresponding VAT amount from the invoice into vat_7; if 'N' set vat_7 = "0"
 - CFR invoices: remark field = full concatenated text from the "หมายเหตุ" section through the "สำหรับร้านค้า" section as printed
