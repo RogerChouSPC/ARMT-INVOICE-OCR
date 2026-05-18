@@ -144,6 +144,7 @@ export default function CustomerMasterPage() {
   const [editValue, setEditValue] = useState('')
   const [dirtyCells, setDirtyCells] = useState<Set<string>>(new Set())
   const [highlightedRows, setHighlightedRows] = useState<Set<string>>(new Set())
+  const [highlightedCells, setHighlightedCells] = useState<Set<string>>(new Set())
   const [toast, setToast]       = useState<{ msg: string; ok: boolean } | null>(null)
   const importRef = useRef<HTMLInputElement>(null)
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -244,29 +245,38 @@ export default function CustomerMasterPage() {
       return
     }
 
-    // Find rows that differ between current state and the snapshot
+    // Find rows and specific cells that differ between current state and the snapshot
     const currentMap = new Map(rows.map(r => [r.id, r]))
     const snapIds = new Set(version.snapshot.map(r => r.id))
-    const changed = new Set<string>()
+    const changedRows = new Set<string>()
+    const changedCells = new Set<string>()
+    const fields = ['store_name', 'customergroup', 'customercode', 'taxid'] as const
     for (const snapRow of version.snapshot) {
       const curr = currentMap.get(snapRow.id)
-      if (!curr) { changed.add(snapRow.id); continue }
-      if ((['store_name', 'customergroup', 'customercode', 'taxid'] as const).some(f => curr[f] !== snapRow[f])) {
-        changed.add(snapRow.id)
+      if (!curr) { changedRows.add(snapRow.id); continue }
+      for (const f of fields) {
+        if (curr[f] !== snapRow[f]) {
+          changedRows.add(snapRow.id)
+          changedCells.add(`${snapRow.id}:${f}`)
+        }
       }
     }
     for (const r of rows) {
-      if (!snapIds.has(r.id)) changed.add(r.id)
+      if (!snapIds.has(r.id)) changedRows.add(r.id)
     }
 
-    setHighlightedRows(changed)
+    setHighlightedRows(changedRows)
+    setHighlightedCells(changedCells)
     localStorage.setItem(LS_ROWS, JSON.stringify(version.snapshot))
     setRows(version.snapshot)
     setDirty(false)
     setDirtyCells(new Set())
     showToast(`Restored: ${version.snapshot.length} rows`)
     if (highlightTimer.current) clearTimeout(highlightTimer.current)
-    highlightTimer.current = setTimeout(() => setHighlightedRows(new Set()), 3000)
+    highlightTimer.current = setTimeout(() => {
+      setHighlightedRows(new Set())
+      setHighlightedCells(new Set())
+    }, 3000)
   }, [history, rows])
 
   // ── cell edit ─────────────────────────────────────────────────────────────
@@ -434,21 +444,21 @@ export default function CustomerMasterPage() {
               <tbody>
                 {rows.map((row, ri) => (
                   <tr key={row.id} className={`border-b border-border transition-colors duration-700 group ${
-                    highlightedRows.has(row.id)
-                      ? 'bg-amber-100 dark:bg-amber-950/50 hover:bg-amber-200/80 dark:hover:bg-amber-900/60'
-                      : 'hover:bg-muted/40'
+                    highlightedRows.has(row.id) ? 'bg-amber-50 dark:bg-amber-950/30' : 'hover:bg-muted/40'
                   }`}>
                     <td className="px-2 py-1 text-center text-muted-foreground/60">{ri + 1}</td>
                     {COLS.map(c => {
-                      const isEditing = editCell?.row === ri && editCell?.col === c.key
-                      const isDirty = dirtyCells.has(`${row.id}:${String(c.key)}`)
+                      const isEditing  = editCell?.row === ri && editCell?.col === c.key
+                      const isDirty    = dirtyCells.has(`${row.id}:${String(c.key)}`)
+                      const isCellDiff = highlightedCells.has(`${row.id}:${String(c.key)}`)
                       const val = row[c.key] as string
                       return (
                         <td
                           key={c.key as string}
                           className={`px-1.5 py-1 cursor-text transition-colors duration-700 ${
-                            isEditing ? 'bg-google-blue-light ring-1 ring-google-blue ring-inset rounded' :
-                            isDirty   ? 'bg-amber-100 dark:bg-amber-950/50' : ''
+                            isEditing  ? 'bg-google-blue-light ring-1 ring-google-blue ring-inset rounded' :
+                            isCellDiff ? 'bg-amber-200 dark:bg-amber-800/60' :
+                            isDirty    ? 'bg-amber-100 dark:bg-amber-950/50' : ''
                           }`}
                           onClick={() => !isEditing && startEdit(ri, c.key)}
                         >

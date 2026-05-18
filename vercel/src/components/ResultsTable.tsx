@@ -18,6 +18,7 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
   const [showHistory, setShowHistory] = useState(false)
   const [history, setHistory] = useState<Snapshot[]>([])
   const [highlightedRows, setHighlightedRows] = useState<Set<number>>(new Set())
+  const [highlightedCells, setHighlightedCells] = useState<Set<string>>(new Set())
   const initialSaved = useRef(false)
   const lastSnapshotJson = useRef('')
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -70,22 +71,27 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
   }
 
   const restoreVersion = (snap: Snapshot) => {
-    // Find rows that differ between current state and the snapshot
-    const changed = new Set<number>()
+    const changedRows = new Set<number>()
+    const changedCells = new Set<string>()
     snap.rows.forEach((snapRow, i) => {
       const curr = rows[i]
-      if (!curr) { changed.add(i); return }
       for (const col of INVOICE_COLUMNS) {
-        if (String(curr[col.key] ?? '') !== String(snapRow[col.key] ?? '')) {
-          changed.add(i)
-          break
+        const before = String(curr?.[col.key] ?? '')
+        const after  = String(snapRow[col.key] ?? '')
+        if (before !== after) {
+          changedRows.add(i)
+          changedCells.add(`${i}:${col.key}`)
         }
       }
     })
-    setHighlightedRows(changed)
+    setHighlightedRows(changedRows)
+    setHighlightedCells(changedCells)
     onUpdate(snap.rows.map(r => ({ ...r })))
     if (highlightTimer.current) clearTimeout(highlightTimer.current)
-    highlightTimer.current = setTimeout(() => setHighlightedRows(new Set()), 3000)
+    highlightTimer.current = setTimeout(() => {
+      setHighlightedRows(new Set())
+      setHighlightedCells(new Set())
+    }, 3000)
   }
 
   const clearHistory = () => {
@@ -178,7 +184,7 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
                   key={rowIdx}
                   className={`border-b border-border transition-colors duration-700 group ${
                     highlightedRows.has(rowIdx)
-                      ? 'bg-amber-100 dark:bg-amber-950/50 hover:bg-amber-200/80 dark:hover:bg-amber-900/60'
+                      ? 'bg-amber-50 dark:bg-amber-950/30'
                       : 'hover:bg-muted/40'
                   }`}
                 >
@@ -195,12 +201,16 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
                   </td>
 
                   {INVOICE_COLUMNS.map((col) => {
-                    const isEditing = editCell?.row === rowIdx && editCell?.col === col.key
+                    const isEditing   = editCell?.row === rowIdx && editCell?.col === col.key
+                    const isCellDiff  = highlightedCells.has(`${rowIdx}:${col.key}`)
                     const value = String(row[col.key] ?? '')
                     return (
                       <td
                         key={col.key}
-                        className={`px-1.5 py-1 ${isEditing ? 'bg-google-blue-light ring-1 ring-google-blue ring-inset rounded' : ''}`}
+                        className={`px-1.5 py-1 transition-colors duration-700 ${
+                          isEditing  ? 'bg-google-blue-light ring-1 ring-google-blue ring-inset rounded' :
+                          isCellDiff ? 'bg-amber-200 dark:bg-amber-800/60' : ''
+                        }`}
                         onClick={() => handleCellClick(rowIdx, col.key)}
                       >
                         {isEditing ? (
