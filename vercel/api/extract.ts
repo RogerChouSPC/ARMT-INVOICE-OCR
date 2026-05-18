@@ -130,19 +130,32 @@ function parseJsonFromText(text: string): object[] {
 // Vendors where vendor_customercode must always be blank
 const BLANK_VENDOR_CODE_NAMES = ['โฮมโปร', 'homepro', 'โลตัส', 'lotus', 'แม็คโคร', 'makro', 'tfg', 'ไทยฟู้ด', 'วิลล่า', 'villa', 'วัตสัน', 'watson', 'watsons']
 
-// Scan the first 50 lines of invoice text for [CODE] or (CODE) on a company name line.
-// This is a deterministic override — the LLM often ignores prompt rules for this field.
+// Scan invoice text for [CODE] or (CODE) that represents our customer code in the vendor's system.
+// Checks buyer name line first (ชื่อผู้ซื้อ = our company), then vendor company name line.
+// Deterministic override — the LLM reliably ignores prompt rules for this field.
 function extractHeaderVendorCode(invoiceText: string): string | null {
-  const lines = invoiceText.split(/\r?\n/).slice(0, 50)
+  const lines = invoiceText.split(/\r?\n/).slice(0, 100)
+
+  // Priority 1: ชื่อผู้ซื้อ / ผู้ซื้อ line — our company name with vendor's code for us
+  // e.g. "ชื่อผู้ซื้อ: บริษัท สหพัฒนพิบูล จำกัด (มหาชน) (042501)"
+  for (const line of lines) {
+    if (/ชื่อผู้ซื้อ|ผู้ซื้อ/.test(line)) {
+      const match = line.match(/[\[(](\d{4,8})[\])]/)
+      if (match) return match[1]
+    }
+  }
+
+  // Priority 2: vendor company name line with code in brackets/parens
+  // e.g. "บริษัท บิวเทรี่ยม จำกัด สำนักงานใหญ่ [321801]"
   for (const line of lines) {
     if (/บริษัท|จำกัด|ห้างหุ้นส่วน/.test(line)) {
-      // skip if this looks like a "leave blank" vendor
       const lower = line.toLowerCase()
       if (BLANK_VENDOR_CODE_NAMES.some(n => lower.includes(n))) continue
       const match = line.match(/[\[(](\d{4,8})[\])]/)
       if (match) return match[1]
     }
   }
+
   return null
 }
 
@@ -178,7 +191,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Expected { text: string, filename?: string, customerMaster?: array }' })
   }
 
-  const truncated = text.length > 12000 ? text.slice(0, 12000) + '\n[truncated]' : text
+  const truncated = text.length > 40000 ? text.slice(0, 40000) + '\n[truncated]' : text
 
   try {
     const apiRes = await fetch(OPENROUTER_URL, {
