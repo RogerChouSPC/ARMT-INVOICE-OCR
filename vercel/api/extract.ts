@@ -64,9 +64,9 @@ RULE B — FALLBACK (only when company name block has NO bracketed/parenthesised
 - Leave BLANK ("") for: โฮมโปร/HomePro, โลตัส/Lotus/LT, แม็คโคร/Makro, TFG/ไทยฟู้ดกรุ๊ป, วิลล่า/Villa Market, วัตสัน/Watson/Watsons
 
 HOW TO MAP vendor_branch:
-- Look for: "Group [number]", "สาขาที่ [code]", "Branch", "Site code", or branch number in company header.
-- Use the branch code WITHOUT leading zeros where it's a number (e.g., "00485" stays "00485", "29130" stays "29130").
-- If vendor is สำนักงานใหญ่ (head office) with no branch code: use "00000".
+- Look ONLY for an explicitly labelled branch code: "Group [number]", "สาขาที่ [code]", "Branch", "Site code".
+- Use the branch code exactly as printed (e.g. "00485", "29130").
+- If NO explicitly labelled branch code is found, return blank "" — do NOT guess, do NOT invent "00000".
 - Leave BLANK ("") for these vendors: วิลล่า / Villa Market, วัตสัน / Watson / Watsons
 
 Given raw text from one or more invoice pages (separated by "--- PAGE BREAK ---"), extract ALL invoice line items and return a JSON array. Each element = one row.
@@ -128,33 +128,29 @@ function parseJsonFromText(text: string): object[] {
 }
 
 // Vendors where vendor_customercode must always be blank
-const BLANK_VENDOR_CODE_NAMES = ['โฮมโปร', 'homepro', 'โลตัส', 'lotus', 'แม็คโคร', 'makro', 'tfg', 'ไทยฟู้ด', 'วิลล่า', 'villa', 'วัตสัน', 'watson', 'watsons']
+const BLANK_VENDOR_CODE_NAMES = ['homepro', 'home product', 'lotus', 'makro', 'tfg', 'villa', 'watson']
 
-// Scan invoice text for [CODE] or (CODE) that represents our customer code in the vendor's system.
-// Checks buyer name line first (ชื่อผู้ซื้อ = our company), then vendor company name line.
-// Deterministic override — the LLM reliably ignores prompt rules for this field.
+// Scan invoice text for [CODE] or (CODE) — our customer code in the vendor's system.
+// Two layouts seen in real invoices (verified against sample PDFs):
+//   A) CMK / CFR — code on the ชื่อผู้ซื้อ (buyer) line, e.g. "...จำกัด ( 042501)"
+//   B) BTM / CFW — code right after the vendor company name header, e.g. "...สำนักงานใหญ่ [321801]"
+// Note: pdf.js joins all text with spaces (no real line breaks), and brackets may
+// contain inner spaces — hence the \s* in the pattern. Deterministic override:
+// the LLM reliably ignores prompt rules for this field.
 function extractHeaderVendorCode(invoiceText: string): string | null {
-  const lines = invoiceText.split(/\r?\n/).slice(0, 100)
+  const head = invoiceText.slice(0, 800)
+  if (BLANK_VENDOR_CODE_NAMES.some((n) => head.toLowerCase().includes(n))) return null
 
-  // Priority 1: ชื่อผู้ซื้อ / ผู้ซื้อ line — our company name with vendor's code for us
-  // e.g. "ชื่อผู้ซื้อ: บริษัท สหพัฒนพิบูล จำกัด (มหาชน) (042501)"
-  for (const line of lines) {
-    if (/ชื่อผู้ซื้อ|ผู้ซื้อ/.test(line)) {
-      const match = line.match(/[\[(](\d{4,8})[\])]/)
-      if (match) return match[1]
-    }
+  // Pattern A: code on the ชื่อผู้ซื้อ (buyer) line
+  const buyerIdx = invoiceText.search(/ชื่อผู้ซื้อ|ผู้ซื้อ/)
+  if (buyerIdx >= 0) {
+    const m = invoiceText.slice(buyerIdx, buyerIdx + 400).match(/[\[(]\s*(\d{4,8})\s*[\])]/)
+    if (m) return m[1]
   }
 
-  // Priority 2: vendor company name line with code in brackets/parens
-  // e.g. "บริษัท บิวเทรี่ยม จำกัด สำนักงานใหญ่ [321801]"
-  for (const line of lines) {
-    if (/บริษัท|จำกัด|ห้างหุ้นส่วน/.test(line)) {
-      const lower = line.toLowerCase()
-      if (BLANK_VENDOR_CODE_NAMES.some(n => lower.includes(n))) continue
-      const match = line.match(/[\[(](\d{4,8})[\])]/)
-      if (match) return match[1]
-    }
-  }
+  // Pattern B: code in the vendor company name header
+  const m2 = head.match(/[\[(]\s*(\d{4,8})\s*[\])]/)
+  if (m2) return m2[1]
 
   return null
 }
