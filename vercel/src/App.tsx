@@ -77,22 +77,25 @@ export default function App() {
           const pages = await renderPdfPages(file, (cur, total) => {
             updateStatus(i, { progress: 25 + (cur / total) * 35 })
           })
-          const ocrTexts: string[] = []
-          for (let p = 0; p < pages.length; p++) {
-            const ocrToken = await getToken()
+          // OCR all pages in parallel — far faster for multi-page invoices.
+          // Promise.all preserves order, so pages stay in sequence.
+          const ocrToken = await getToken()
+          let ocrDone = 0
+          const ocrTexts = await Promise.all(pages.map(async (page, p) => {
             const ocrRes = await fetch('/api/ocr', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', ...(ocrToken ? { Authorization: `Bearer ${ocrToken}` } : {}) },
-              body: JSON.stringify({ image: pages[p].base64 }),
+              body: JSON.stringify({ image: page.base64 }),
             })
             if (!ocrRes.ok) {
               const err = await ocrRes.json().catch(() => ({ error: `HTTP ${ocrRes.status}` }))
               throw new Error(err.error || `OCR failed on page ${p + 1}`)
             }
             const { text } = await ocrRes.json()
-            ocrTexts.push(text)
-            updateStatus(i, { progress: 60 + ((p + 1) / pages.length) * 20 })
-          }
+            ocrDone++
+            updateStatus(i, { progress: 60 + (ocrDone / pages.length) * 20 })
+            return text as string
+          }))
           updateStatus(i, { state: 'extracting', progress: 80 })
           const extractToken = await getToken()
           const extractRes = await fetch('/api/extract', {
