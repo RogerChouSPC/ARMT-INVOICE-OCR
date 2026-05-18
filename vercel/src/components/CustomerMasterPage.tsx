@@ -33,7 +33,7 @@ export interface Version {
 const LS_ROWS    = 'armt_cm_rows'
 const LS_HISTORY = 'armt_cm_history'
 const LS_VER     = 'armt_cm_ver'
-const SCHEMA_VER = '3'
+const SCHEMA_VER = '4'
 
 // ── Seed data ─────────────────────────────────────────────────────────────────
 const SEED: Omit<CustomerRow, 'id'>[] = [
@@ -189,8 +189,7 @@ export default function CustomerMasterPage() {
         deleted:  changes.filter(c => c.type === 'delete').length,
         modified: changes.filter(c => c.type === 'edit').length,
         changes,
-        // snapshot = state BEFORE this save so Restore undoes it
-        snapshot: prevRows.length > 0 ? prevRows : finalRows,
+        snapshot: finalRows,
       }
       const newHistory = [version, ...history].slice(0, 50)
       localStorage.setItem(LS_ROWS, JSON.stringify(finalRows))
@@ -219,7 +218,7 @@ export default function CustomerMasterPage() {
       deleted:  changes.filter(c => c.type === 'delete').length,
       modified: changes.filter(c => c.type === 'edit').length,
       changes,
-      snapshot: prevRows.length > 0 ? prevRows : seedRows,
+      snapshot: seedRows,
     }
     const newHistory = [version, ...history].slice(0, 50)
     localStorage.setItem(LS_ROWS, JSON.stringify(seedRows))
@@ -303,8 +302,7 @@ export default function CustomerMasterPage() {
         deleted:  changes.filter(c => c.type === 'delete').length,
         modified: changes.filter(c => c.type === 'edit').length,
         changes,
-        // snapshot = state BEFORE import so Restore undoes the import
-        snapshot: prevRows.length > 0 ? prevRows : imported,
+        snapshot: imported,
       }
       const newHistory = [version, ...lsGetHistory()].slice(0, 50)
       localStorage.setItem(LS_ROWS, JSON.stringify(imported))
@@ -493,48 +491,54 @@ export default function CustomerMasterPage() {
               <div className="overflow-y-auto max-h-[calc(100vh-280px)]">
                 {history.map(v => (
                   <div key={v.id} className="border-b border-border last:border-0">
-                    <div
-                      className="px-4 py-3 hover:bg-muted/40 cursor-pointer flex items-start justify-between gap-2"
-                      onClick={() => setExpandedVersion(expandedVersion === v.id ? null : v.id)}
-                    >
-                      <div className="min-w-0 flex-1">
+                    <div className="flex items-start">
+                      {/* Main click area → restore this version */}
+                      <button
+                        className="flex-1 min-w-0 px-4 py-3 text-left hover:bg-muted/60 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={!v.snapshot || v.snapshot.length === 0}
+                        onClick={() => restore(v.id)}
+                        title={v.snapshot?.length > 0 ? `Restore to this version (${v.snapshot.length} rows)` : 'No snapshot available'}
+                      >
                         <div className="text-xs font-medium text-foreground truncate">{v.label}</div>
                         <div className="text-[11px] text-muted-foreground mt-0.5">{fmtDate(v.timestamp)}</div>
                         <div className="flex gap-1.5 mt-1.5 flex-wrap">
                           {v.snapshot?.length > 0 && (
                             <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">
-                              {v.snapshot.length} rows total
+                              {v.snapshot.length} rows
                             </span>
                           )}
                           {v.added > 0 && (
                             <span className="text-[10px] bg-green-50 dark:bg-green-950/60 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded-full">
-                              +{v.added} added
+                              +{v.added}
                             </span>
                           )}
                           {v.deleted > 0 && (
                             <span className="text-[10px] bg-red-50 dark:bg-red-950/60 text-red-600 dark:text-red-400 px-1.5 py-0.5 rounded-full">
-                              -{v.deleted} deleted
+                              -{v.deleted}
                             </span>
                           )}
                           {v.modified > 0 && (
                             <span className="text-[10px] bg-yellow-50 dark:bg-yellow-950/60 text-yellow-700 dark:text-yellow-400 px-1.5 py-0.5 rounded-full">
-                              {v.modified} edited
+                              ~{v.modified}
                             </span>
                           )}
-                          {v.added === 0 && v.deleted === 0 && v.modified === 0 && (!v.snapshot || v.snapshot.length === 0) && (
-                            <span className="text-[10px] text-muted-foreground">no changes recorded</span>
-                          )}
                         </div>
-                      </div>
-                      <button
-                        onClick={e => { e.stopPropagation(); restore(v.id) }}
-                        disabled={!v.snapshot || v.snapshot.length === 0}
-                        title={v.snapshot?.length > 0 ? `Undo this save → restore ${v.snapshot.length} rows` : 'No snapshot available'}
-                        className="shrink-0 text-[11px] text-primary hover:underline disabled:text-muted-foreground/30 disabled:cursor-not-allowed"
-                      >
-                        Undo
                       </button>
+
+                      {/* Chevron — expand/collapse diff details */}
+                      {v.changes.length > 0 && (
+                        <button
+                          onClick={() => setExpandedVersion(expandedVersion === v.id ? null : v.id)}
+                          className="shrink-0 px-3 py-3 text-muted-foreground hover:text-foreground transition-colors self-start"
+                          title="Show changes"
+                        >
+                          <svg viewBox="0 0 24 24" className={`w-3.5 h-3.5 fill-current transition-transform ${expandedVersion === v.id ? 'rotate-180' : ''}`}>
+                            <path d="M7 10l5 5 5-5z" />
+                          </svg>
+                        </button>
+                      )}
                     </div>
+
                     {expandedVersion === v.id && v.changes.length > 0 && (
                       <div className="px-4 pb-3 space-y-1">
                         {v.changes.map((c, ci) => (
