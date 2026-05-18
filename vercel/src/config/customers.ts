@@ -85,7 +85,7 @@ export const CUSTOMER_RULES: CustomerRule[] = [
     label: 'AEON',
     match: { filenameKeywords: ['aeon'], nameKeywords: ['อิออน'] },
     extractMode: 'ocr',
-    vendorCode: 'auto',
+    vendorCode: 'blank',
     vendorBranch: 'auto',
     notes: 'NEVER calculate or derive any tax/VAT amount — only copy figures explicitly printed on the invoice.',
   },
