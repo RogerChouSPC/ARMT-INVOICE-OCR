@@ -143,8 +143,10 @@ export default function CustomerMasterPage() {
   const [editCell, setEditCell] = useState<{ row: number; col: keyof CustomerRow } | null>(null)
   const [editValue, setEditValue] = useState('')
   const [dirtyCells, setDirtyCells] = useState<Set<string>>(new Set())
+  const [highlightedRows, setHighlightedRows] = useState<Set<string>>(new Set())
   const [toast, setToast]       = useState<{ msg: string; ok: boolean } | null>(null)
   const importRef = useRef<HTMLInputElement>(null)
+  const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── load from localStorage ────────────────────────────────────────────────
   useEffect(() => {
@@ -242,12 +244,30 @@ export default function CustomerMasterPage() {
       return
     }
 
+    // Find rows that differ between current state and the snapshot
+    const currentMap = new Map(rows.map(r => [r.id, r]))
+    const snapIds = new Set(version.snapshot.map(r => r.id))
+    const changed = new Set<string>()
+    for (const snapRow of version.snapshot) {
+      const curr = currentMap.get(snapRow.id)
+      if (!curr) { changed.add(snapRow.id); continue }
+      if ((['store_name', 'customergroup', 'customercode', 'taxid'] as const).some(f => curr[f] !== snapRow[f])) {
+        changed.add(snapRow.id)
+      }
+    }
+    for (const r of rows) {
+      if (!snapIds.has(r.id)) changed.add(r.id)
+    }
+
+    setHighlightedRows(changed)
     localStorage.setItem(LS_ROWS, JSON.stringify(version.snapshot))
     setRows(version.snapshot)
     setDirty(false)
     setDirtyCells(new Set())
     showToast(`Restored: ${version.snapshot.length} rows`)
-  }, [history])
+    if (highlightTimer.current) clearTimeout(highlightTimer.current)
+    highlightTimer.current = setTimeout(() => setHighlightedRows(new Set()), 3000)
+  }, [history, rows])
 
   // ── cell edit ─────────────────────────────────────────────────────────────
   const startEdit = (rowIdx: number, col: keyof CustomerRow) => {
@@ -413,7 +433,11 @@ export default function CustomerMasterPage() {
               </thead>
               <tbody>
                 {rows.map((row, ri) => (
-                  <tr key={row.id} className="border-b border-border hover:bg-muted/40 transition-colors group">
+                  <tr key={row.id} className={`border-b border-border transition-colors duration-700 group ${
+                    highlightedRows.has(row.id)
+                      ? 'bg-amber-100 dark:bg-amber-950/50 hover:bg-amber-200/80 dark:hover:bg-amber-900/60'
+                      : 'hover:bg-muted/40'
+                  }`}>
                     <td className="px-2 py-1 text-center text-muted-foreground/60">{ri + 1}</td>
                     {COLS.map(c => {
                       const isEditing = editCell?.row === ri && editCell?.col === c.key
