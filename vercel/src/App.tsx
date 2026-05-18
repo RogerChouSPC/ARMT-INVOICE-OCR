@@ -168,7 +168,7 @@ export default function App() {
             </div>
           )}
 
-          <div className="max-w-3xl mx-auto w-full flex flex-col gap-6">
+          <div className={`max-w-3xl mx-auto w-full flex flex-col gap-6 ${(statuses.length > 0 || rows.length > 0) ? 'pt-8' : ''}`}>
             {rows.length > 0 && (
               <div className="pt-8 pb-2 flex items-center justify-between animate-fade-in">
                 <span className="text-sm text-muted-foreground">{rows.length} {rows.length === 1 ? 'row' : 'rows'} extracted</span>

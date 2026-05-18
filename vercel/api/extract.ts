@@ -42,15 +42,23 @@ HOW TO MAP customergroup and customercode:
 4. Copy customergroup and customercode EXACTLY from the matching Customer Master row.
 
 HOW TO MAP vendor_customercode:
-- Look for: "รหัสร้านค้า", "Customer Code", "ชื่อลูกค้า [CODE]", "เจ้าของ/ตัวแทน(รหัสร้านค้า)"
-- Strip any text prefixes: "BTM-MC15009" → "15009"; "TOP-M802316" → "802316"; "CFW-M900548" → "900548"; "LS16985" → "LS16985" (keep if no clear rule); numeric only is preferred.
-- For Big C: the code starting with "4000047" or similar 7-digit number next to our name.
-- For CP All / 7-11: the supplier code (2000087 etc.) from the invoice.
+Search in this priority order:
+1. Bracket pattern in the vendor company name header: "Company Name [CODE]" → extract CODE.
+   e.g. "บริษัท บิวเทรี่ยม จำกัด สำนักงานใหญ่ [321801]" → "321801"
+   e.g. "CFW [040201]" → "040201" ; "CMK [042501]" → "042501"
+2. Field labels: "รหัสร้านค้า", "Customer Code", "Supplier Code", "ชื่อลูกค้า [CODE]", "เจ้าของ/ตัวแทน(รหัสร้านค้า)"
+3. "A/C No" field (Foodland invoices)
+4. "Vendor No" field (PTT invoices)
+5. Big C: 7-digit code next to our company name (e.g. 4000047…)
+6. CP All / 7-11: supplier code (e.g. 2000087)
+- Strip text prefixes: "BTM-MC15009" → "15009"; "TOP-M802316" → "802316"; "CFW-M900548" → "900548"
+- Leave BLANK ("") for these vendors: โฮมโปร / HomePro, โลตัส / Lotus / LT, แม็คโคร / Makro, TFG / ไทยฟู้ดกรุ๊ป, วิลล่า / Villa Market, วัตสัน / Watson / Watsons
 
 HOW TO MAP vendor_branch:
 - Look for: "Group [number]", "สาขาที่ [code]", "Branch", "Site code", or branch number in company header.
 - Use the branch code WITHOUT leading zeros where it's a number (e.g., "00485" stays "00485", "29130" stays "29130").
 - If vendor is สำนักงานใหญ่ (head office) with no branch code: use "00000".
+- Leave BLANK ("") for these vendors: วิลล่า / Villa Market, วัตสัน / Watson / Watsons
 
 Given raw text from one or more invoice pages (separated by "--- PAGE BREAK ---"), extract ALL invoice line items and return a JSON array. Each element = one row.
 
@@ -87,6 +95,12 @@ Rules:
 - Numbers → plain string without commas or currency symbols
 - Dates → YYYY-MM-DD; 4-digit year ≥ 2500 = Buddhist Era → subtract 543; 2-digit year = prepend "20" (never subtract 543)
 - Tax ID = exactly 13 digits
+- NEVER calculate or derive any tax/VAT amount — only copy figures that are explicitly printed on the invoice; if not printed, use "0"
+- invoiceno: extract exactly as printed including slashes and digits, do NOT drop characters (e.g. "3530103/010426" → "3530103/010426")
+- product_description: copy the EXACT text from the invoice verbatim — do NOT paraphrase, summarise, or substitute Thai terms (e.g. invoice says "ค่ากระจายสินค้า dc fee" → output that exactly, NOT "ค่าบริหารจัดการ (DC Fee)")
+- product_description: preserve ALL languages as printed; include both Thai and English when both appear (e.g. "ส่วนลด Discount" not just "Discount")
+- Boots invoices: each line item may have a VAT marker column next to the amount ('V' = VAT 7%, 'N' = Non-VAT); if marker is 'V' read the corresponding VAT amount from the invoice into vat_7; if 'N' set vat_7 = "0"
+- CFR invoices: remark field = full concatenated text from the "หมายเหตุ" section through the "สำหรับร้านค้า" section as printed
 - Return ONLY a valid JSON array, no markdown fences, no explanation`
 }
 
