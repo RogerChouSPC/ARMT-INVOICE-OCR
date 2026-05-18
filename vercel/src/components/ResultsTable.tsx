@@ -47,11 +47,12 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
 
   if (rows.length === 0) return null
 
-  const pushSnapshot = () => {
-    const json = JSON.stringify(rows)
+  const pushSnapshot = (targetRows?: InvoiceRow[]) => {
+    const target = targetRows ?? rows
+    const json = JSON.stringify(target)
     if (json === lastSnapshotJson.current) return
     lastSnapshotJson.current = json
-    setHistory(prev => [...prev, { rows: rows.map(r => ({ ...r })), timestamp: new Date() }])
+    setHistory(prev => [...prev, { rows: target.map(r => ({ ...r })), timestamp: new Date() }])
   }
 
   const updateCell = (rowIdx: number, col: keyof InvoiceRow, value: string) => {
@@ -207,8 +208,19 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
                             className="input-cell"
                             value={value}
                             onChange={(e) => updateCell(rowIdx, col.key, e.target.value)}
-                            onBlur={() => setEditCell(null)}
-                            onKeyDown={(e) => e.key === 'Escape' && setEditCell(null)}
+                            onBlur={(e) => {
+                              const finalRows = rows.map((r, i) => i === rowIdx ? { ...r, [col.key]: e.target.value } : r)
+                              pushSnapshot(finalRows)
+                              setEditCell(null)
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                const finalRows = rows.map((r, i) => i === rowIdx ? { ...r, [col.key]: e.currentTarget.value } : r)
+                                pushSnapshot(finalRows)
+                                setEditCell(null)
+                              }
+                              if (e.key === 'Escape') setEditCell(null)
+                            }}
                             style={{ minWidth: col.width - 12 }}
                           />
                         ) : (
