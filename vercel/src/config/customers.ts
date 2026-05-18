@@ -182,6 +182,15 @@ export const CUSTOMER_RULES: CustomerRule[] = [
     vendorCode: 'blank',
     vendorBranch: 'blank',
   },
+  {
+    id: 'BIGC_FOOD',
+    label: 'Big C Food Service',
+    match: { nameKeywords: ['บิ๊กซี ฟู๊ด', 'big c food service', 'bigc food'] },
+    extractMode: 'auto',
+    vendorCode: 'blank',
+    vendorBranch: 'auto',
+    notes: 'vendor_customercode is always blank. Any numeric code on the invoice such as "00000" is the vendor_branch, not the vendor_customercode.',
+  },
 ]
 
 function escapeRegExp(s: string): string {
