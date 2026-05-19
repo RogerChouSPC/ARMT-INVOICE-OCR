@@ -19,10 +19,12 @@ export type ExtractMode = 'auto' | 'ocr' | 'text'
 //   'header-bracket' — [CODE] / (CODE) after the company name    (BTM, CFW)
 //   'ac-no'          — value of the "A/C No" field
 //   'vendor-no'      — value of the "Vendor No" field            (PTT)
+//   'customer-line'  — code on the labelled customer line:       (Big C, CJ, CP All)
+//                      รหัสลูกค้า / รหัสลูกหนี้ / start of ชื่อลูกค้า
 //   'blank'          — always empty                              (HomePro, LT, ...)
 //   'auto'           — try buyer-line, then header-bracket        (default)
 export type VendorCodeSource =
-  | 'buyer-line' | 'header-bracket' | 'ac-no' | 'vendor-no' | 'blank' | 'auto'
+  | 'buyer-line' | 'header-bracket' | 'ac-no' | 'vendor-no' | 'customer-line' | 'blank' | 'auto'
 
 export interface CustomerRule {
   id: string
@@ -61,8 +63,9 @@ export const CUSTOMER_RULES: CustomerRule[] = [
     label: 'Central Food (CFM)',
     match: { filenameKeywords: ['cfm'], nameKeywords: ['เซ็นทรัลฟู้ด มินิมาร์เก็ต', 'central food minimart'], taxids: ['0105535133093'] },
     extractMode: 'ocr',
-    vendorCode: 'blank',
+    vendorCode: 'customer-line',
     vendorBranch: 'blank',
+    notes: 'vendor_customercode = the value next to "เจ้าของ/ตัวแทน(รหัสร้านค้า)" (e.g. 9812292).',
   },
   {
     id: 'BTM',
@@ -83,20 +86,20 @@ export const CUSTOMER_RULES: CustomerRule[] = [
   {
     id: 'AEON',
     label: 'AEON',
-    match: { filenameKeywords: ['aeon'], nameKeywords: ['อิออน'] },
+    match: { filenameKeywords: ['aeon'], nameKeywords: ['อิออน'], taxids: ['0105527044125'] },
     extractMode: 'ocr',
-    vendorCode: 'blank',
+    vendorCode: 'customer-line',
     vendorBranch: 'auto',
-    notes: 'NEVER calculate or derive any tax/VAT amount — only copy figures explicitly printed on the invoice.',
+    notes: 'NEVER calculate or derive any tax/VAT amount — only copy figures explicitly printed on the invoice. vendor_customercode = the value of the "รหัสผู้ซื้อ" field.',
   },
   {
     id: 'BOOTS',
     label: 'Boots',
-    match: { filenameKeywords: ['boots'], nameKeywords: ['บู๊ทส์'] },
+    match: { filenameKeywords: ['boots'], nameKeywords: ['บู๊ทส์', 'boots retail'], taxids: ['0115539007084'] },
     extractMode: 'ocr',
-    vendorCode: 'blank',
+    vendorCode: 'customer-line',
     vendorBranch: 'auto',
-    notes: 'Each line item has a VAT marker column next to the amount: "V" = VAT 7%, "N" = Non-VAT. When the marker is "V", put that line\'s VAT amount into vat_7. When "N", set vat_7 = "0".',
+    notes: 'vendor_customercode = the value next to the "Customer :" label (e.g. "S006-1"). Each line item has a VAT marker column next to the amount: "V" = VAT 7%, "N" = Non-VAT. When the marker is "V", put that line\'s VAT amount into vat_7. When "N", set vat_7 = "0".',
   },
   {
     id: 'CJ',
@@ -107,90 +110,99 @@ export const CUSTOMER_RULES: CustomerRule[] = [
       taxids: ['0105556055491'],
     },
     extractMode: 'ocr',
-    vendorCode: 'blank',
+    vendorCode: 'customer-line',
     vendorBranch: 'auto',
     notes: 'product_description MUST be copied verbatim — never reword, translate, or "correct" Thai. e.g. keep "ค่ากระจายสินค้า dc fee" exactly; never rewrite it as "ค่าบริหารจัดการ (DC Fee)".',
   },
   {
     id: 'FOODLAND',
     label: 'Foodland',
-    match: { filenameKeywords: ['foodland'], nameKeywords: ['foodland', 'ฟู้ดแลนด์'] },
+    match: { filenameKeywords: ['foodland'], nameKeywords: ['foodland', 'ฟู้ดแลนด์'], taxids: ['0105515004549'] },
     extractMode: 'ocr',
-    vendorCode: 'blank',
+    vendorCode: 'ac-no',
     vendorBranch: 'auto',
+    notes: 'vendor_customercode = the value of the "A/C No" field (e.g. 929509). "ลำดับที่สาขา" is our own branch, not the vendor code.',
   },
   {
     id: 'PTT',
     label: 'PTT',
     match: { filenameKeywords: ['ptt'], nameKeywords: ['ปตท'], taxids: ['0105537121254'] },
     extractMode: 'ocr',
-    vendorCode: 'blank',
+    vendorCode: 'vendor-no',
     vendorBranch: 'auto',
+    notes: 'vendor_customercode = the value printed in the "Vendor No" field.',
   },
   {
     id: 'THEMALL',
     label: 'The Mall',
     match: { filenameKeywords: ['themall'], nameKeywords: ['the mall', 'เดอะมอลล์'] },
     extractMode: 'ocr',
-    vendorCode: 'blank',
+    vendorCode: 'customer-line',
     vendorBranch: 'auto',
-    notes: 'product_description must include BOTH the Thai and English text as printed, e.g. "ส่วนลด Discount" — never drop the Thai part. The code next to "ชื่อลูกค้า" is สหพัฒนพิบูล (our company) — never use it.',
+    notes: 'product_description must include BOTH the Thai and English text as printed, e.g. "ส่วนลด Discount" — never drop the Thai part. vendor_customercode = the code at the start of the ชื่อลูกค้า line (e.g. "SHP00" / "SHP20").',
   },
   {
     id: 'HOMEPRO',
     label: 'HomePro',
-    match: { filenameKeywords: ['homepro'], nameKeywords: ['homepro', 'home product', 'โฮมโปร'] },
+    match: { filenameKeywords: ['homepro'], nameKeywords: ['homepro', 'home product', 'โฮมโปร'], taxids: ['0107544000043'] },
     extractMode: 'ocr',
-    vendorCode: 'blank',
+    vendorCode: 'customer-line',
     vendorBranch: 'auto',
+    notes: 'vendor_customercode = the value next to "รหัสลูกค้า" (e.g. 1000515117). Drop any "/ V.xxxx" suffix.',
   },
   {
     id: 'LT',
     label: 'Lotus (LT)',
-    match: { filenameKeywords: ['lt', 'lotus'], nameKeywords: ['โลตัส'] },
+    match: { filenameKeywords: ['lt', 'lotus'], nameKeywords: ['โลตัส', 'lotus'] },
     extractMode: 'text',
-    vendorCode: 'blank',
+    vendorCode: 'customer-line',
     vendorBranch: 'auto',
+    notes: 'vendor_customercode = the value of the "Customer Code" / "รหัสลูกค้า" field (e.g. TH00607).',
   },
   {
     id: 'MAKRO',
     label: 'Makro',
     match: { filenameKeywords: ['makro'], nameKeywords: ['makro', 'แม็คโคร'] },
     extractMode: 'ocr',
-    vendorCode: 'blank',
+    vendorCode: 'customer-line',
     vendorBranch: 'auto',
+    notes: 'vendor_customercode = the number in (parentheses) after our company name on the "ได้รับเงินจาก" line (e.g. 2128209).',
   },
   {
     id: 'TFG',
     label: 'TFG',
     match: { filenameKeywords: ['tfg'], nameKeywords: ['ไทยฟู้ด'] },
     extractMode: 'ocr',
-    vendorCode: 'blank',
+    vendorCode: 'customer-line',
     vendorBranch: 'auto',
+    notes: 'vendor_customercode = the value next to the "รหัสลูกค้า" field.',
   },
   {
     id: 'VILLA',
     label: 'Villa Market',
     match: { filenameKeywords: ['villa'], nameKeywords: ['villa market', 'วิลล่า'] },
     extractMode: 'ocr',
-    vendorCode: 'blank',
+    vendorCode: 'customer-line',
     vendorBranch: 'blank',
+    notes: 'vendor_customercode = the code on the right side of the invoice that starts with "PVC" (the prefix may vary).',
   },
   {
     id: 'WATSON',
     label: 'Watsons',
     match: { filenameKeywords: ['watson', 'watsons'], nameKeywords: ['watson', 'วัตสัน'] },
     extractMode: 'ocr',
-    vendorCode: 'blank',
+    vendorCode: 'customer-line',
     vendorBranch: 'blank',
+    notes: 'vendor_customercode = the value next to "Attn:" on the right side of the invoice.',
   },
   {
     id: 'TSURUHA',
     label: 'Tsuruha',
     match: { filenameKeywords: ['tsuruha'], nameKeywords: ['tsuruha', 'ซูรูฮะ'] },
     extractMode: 'ocr',
-    vendorCode: 'blank',
+    vendorCode: 'customer-line',
     vendorBranch: 'auto',
+    notes: 'vendor_customercode = the value of the "Vendor" field.',
   },
   {
     id: 'BIGC_FOOD',
@@ -201,9 +213,9 @@ export const CUSTOMER_RULES: CustomerRule[] = [
       taxids: ['0105563176541'],
     },
     extractMode: 'auto',
-    vendorCode: 'blank',
+    vendorCode: 'customer-line',
     vendorBranch: 'auto',
-    notes: 'vendor_customercode is always blank. The numeric code printed right after the vendor company name (e.g. "00000") is the vendor_branch — put it in vendor_branch, never in vendor_customercode.',
+    notes: 'vendor_customercode = the number at the start of the ชื่อลูกค้า line (e.g. 6600179). The numeric code printed right after the VENDOR company name at the top (e.g. "00000") is the vendor_branch, NOT the vendor_customercode — keep the two separate.',
   },
   {
     id: 'BIGC',
@@ -214,9 +226,9 @@ export const CUSTOMER_RULES: CustomerRule[] = [
       taxids: ['0107536000633'],
     },
     extractMode: 'auto',
-    vendorCode: 'blank',
+    vendorCode: 'customer-line',
     vendorBranch: 'auto',
-    notes: 'vendor_customercode is always blank. The numeric code printed right after the vendor company name (e.g. "00000" or "00485") is the vendor_branch — put it in vendor_branch, never in vendor_customercode.',
+    notes: 'vendor_customercode = the number at the start of the ชื่อลูกค้า line (e.g. 4000047). The numeric code printed right after the VENDOR company name at the top (e.g. "00000" or "00485") is the vendor_branch, NOT the vendor_customercode — keep the two separate.',
   },
   {
     id: 'CP_ALL',
@@ -227,7 +239,7 @@ export const CUSTOMER_RULES: CustomerRule[] = [
       taxids: ['0107542000011', '0105565017547'],
     },
     extractMode: 'auto',
-    vendorCode: 'blank',
+    vendorCode: 'customer-line',
     vendorBranch: 'auto',
   },
 ]
@@ -280,6 +292,8 @@ function vendorCodeInstruction(src: VendorCodeSource): string {
       return 'vendor_customercode: the value printed in the "A/C No" field.'
     case 'vendor-no':
       return 'vendor_customercode: the value printed in the "Vendor No" field.'
+    case 'customer-line':
+      return 'vendor_customercode: the code our company (the buyer) was assigned by this vendor. Find it next to a customer/buyer/account-code label (รหัสลูกค้า / รหัสลูกหนี้ / รหัสผู้ซื้อ / รหัสร้านค้า / Customer Code / Customer No / "Customer:"), or as the leading code on the ชื่อลูกค้า / ชื่อผู้ซื้อ line, or a code in (parentheses) after our company name. It is NOT the vendor_branch and NOT the vendor company name.'
     case 'blank':
       return 'vendor_customercode: always return "" (blank).'
     case 'auto':
@@ -293,7 +307,7 @@ export function buildCustomerInstructions(rule: CustomerRule | null): string {
   if (!rule) {
     return `DETECTED CUSTOMER: unknown — use general rules.
 ${vendorCodeInstruction('auto')}
-vendor_branch: only an explicitly labelled branch ("สาขาที่", "Branch", "Site code"); "Group [number]" is NOT a branch; return "" if none found.`
+vendor_branch: if the vendor (issuer) company designation anywhere on the invoice includes "สำนักงานใหญ่" (and this refers to the vendor company, NOT to สหพัฒนพิบูล / our company), return "00000". Otherwise, use only an explicitly labelled branch ("สาขาที่", "Branch", "Site code"); "Group [number]" is NOT a branch; return "" if none found.`
   }
 
   const lines: string[] = [`DETECTED CUSTOMER: ${rule.label}`, vendorCodeInstruction(rule.vendorCode)]
@@ -301,7 +315,7 @@ vendor_branch: only an explicitly labelled branch ("สาขาที่", "Bra
   if (rule.vendorBranch === 'blank') {
     lines.push('vendor_branch: always return "" (blank).')
   } else {
-    lines.push('vendor_branch: only an explicitly labelled branch ("สาขาที่", "Branch", "Site code"); "Group [number]" is NOT a branch; return "" if none found.')
+    lines.push('vendor_branch: if the vendor (issuer) company designation anywhere on the invoice includes "สำนักงานใหญ่" (and this refers to the vendor company, NOT to สหพัฒนพิบูล / our company), return "00000". Otherwise, use only an explicitly labelled branch ("สาขาที่", "Branch", "Site code"); "Group [number]" is NOT a branch; return "" if none found.')
   }
 
   if (rule.notes) lines.push(rule.notes)
