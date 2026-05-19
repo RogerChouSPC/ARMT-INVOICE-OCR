@@ -33,7 +33,7 @@ export interface Version {
 const LS_ROWS    = 'armt_cm_rows'
 const LS_HISTORY = 'armt_cm_history'
 const LS_VER     = 'armt_cm_ver'
-const SCHEMA_VER = '4'
+const SCHEMA_VER = '5'
 
 // ── Seed data ─────────────────────────────────────────────────────────────────
 const SEED: Omit<CustomerRow, 'id'>[] = [
@@ -72,7 +72,7 @@ const SEED: Omit<CustomerRow, 'id'>[] = [
   { store_name: 'ปตท', customergroup: '25 - ปตท (Jiffy)', customercode: '0051460 - บริษัท ปตท. บริหารธุรกิจค้าปลีก จำกัด สำนักงานใหญ่', taxid: '0105537121254' },
   { store_name: 'ซูรูฮะ', customergroup: '46 - ซูรูฮะ', customercode: '0113748 - บริษัท ซูรูฮะ(ประเทศไทย) จำกัด สำนักงานใหญ่', taxid: '0105554157903' },
   { store_name: 'ซี.เจ. เอ็กซ์เพรส', customergroup: '47 - ซี.เจ.เอ็กซ์เพรส', customercode: '0076746 - บริษัท ซี.เจ. เอ็กซ์เพรส กรุ๊ป จำกัด สำนักงานใหญ่', taxid: '0105556055491' },
-  { store_name: 'บิ๊กซี ฟู๊ด', customergroup: '68 - เอ็มเอ็ม เมก้า มาร์เก็ต', customercode: '0116224 - บริษัท บิ๊กซี ฟู๊ด เซอร์วิส จำกัด สำนักงานใหญ่', taxid: '0107536000633' },
+  { store_name: 'บิ๊กซี ฟู๊ด', customergroup: '68 - เอ็มเอ็ม เมก้า มาร์เก็ต', customercode: '0116224 - บริษัท บิ๊กซี ฟู๊ด เซอร์วิส จำกัด สำนักงานใหญ่', taxid: '0105563176541' },
   { store_name: 'ปิโตรเลียมไทย', customergroup: '69 - แมกซ์มาร์ท', customercode: '0086901 - บริษัท ปิโตรเลียมไทยคอร์ปอเรชั่น จำกัด สำนักงานใหญ่', taxid: '0105535099511' },
   { store_name: 'เซ็นทรัลฟู้ด โฮลเซลล์', customergroup: '80 - เซ็นทรัลฟู้ดโฮลเซล', customercode: '0118701 - บริษัท เซ็นทรัล ฟู้ด โฮลเซลล์ จำกัด สำนักงานใหญ่', taxid: '0125565034662' },
   { store_name: 'โฮมโปร', customergroup: '82 - โฮมโปร', customercode: '0114242 - บริษัท โฮม โปรดักส์ เซ็นเตอร์ จำกัด (มหาชน) สำนักงานใหญ่', taxid: '0107544000043' },
