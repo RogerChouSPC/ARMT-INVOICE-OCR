@@ -12,7 +12,7 @@ Audience: IT Director / System Administrator / Lead Developer
 ┌─────────────────────────────────────────────────────────────┐
 │                        USER BROWSER                          │
 │                                                               │
-│  React SPA (Vite build, served from Vercel CDN)               │
+│  React SPA (Vite build, served by the Express server)         │
 │  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌───────────┐  │
 │  │  PDF.js    │ │  MSAL.js   │ │  SheetJS   │ │  Customer │  │
 │  │ (parse +   │ │ (Azure AD  │ │  (xlsx     │ │  config + │  │
@@ -21,10 +21,10 @@ Audience: IT Director / System Administrator / Lead Developer
 └───────────────────────────┬───────────────────────────────────┘
                             │ HTTPS
               ┌─────────────▼──────────────┐
-              │      VERCEL PLATFORM        │
-              │                             │
-              │  /api/ocr      (serverless) │
-              │  /api/extract  (serverless) │
+              │  COMPANY SERVER (Docker)   │
+              │  Express server (Node.js)  │
+              │  /api/ocr      route       │
+              │  /api/extract  route       │
               └──────────┬──────────────────┘
                          │ HTTPS
           ┌──────────────▼──────────────────────────┐
@@ -56,27 +56,31 @@ Browser ──► Microsoft Azure AD (login.microsoftonline.com)
 | PDF engine    | PDF.js (pdfjs-dist) | 4.9.155 | Client-side PDF parsing + rendering |
 | Excel export  | SheetJS (xlsx)      | 0.18.5  | Generate .xlsx in browser           |
 | Auth client   | @azure/msal-browser | 5.10.1  | Microsoft SSO                       |
-| Analytics     | @vercel/analytics   | 2.0.1   | Page view tracking                  |
 
 All processing (PDF reading, OCR rendering, Excel generation) happens **in the user's browser** — no file is uploaded to or stored on any server.
 
-### 2.2 Backend (Serverless Functions)
+### 2.2 Backend (Express Server)
 
-| Function | Path              | Runtime               | Purpose                                                         |
-| -------- | ----------------- | --------------------- | --------------------------------------------------------------- |
-| OCR      | `/api/ocr.ts`     | Vercel Node.js (20.x) | Send image to Gemini Vision, return extracted text              |
-| Extract  | `/api/extract.ts` | Vercel Node.js (20.x) | Send invoice text + customer instructions to Gemini, return JSON |
+A single Express (Node.js 20) server handles both API routes and serves the
+built frontend. It runs inside a Docker container. Entry point: `server/index.ts`.
 
-Both functions are **stateless** — no database, no file storage. Each request is self-contained. `api/extract.ts` is fully self-contained (it imports nothing from `src/`) because a Vercel serverless function cannot reliably resolve cross-directory imports at runtime.
+| Route               | File             | Purpose                                                          |
+| ------------------- | ---------------- | ---------------------------------------------------------------- |
+| `POST /api/ocr`     | `api/ocr.ts`     | Send image to Gemini Vision, return extracted text               |
+| `POST /api/extract` | `api/extract.ts` | Send invoice text + customer instructions to Gemini, return JSON |
+
+Both routes are **stateless** — no database, no file storage. Each request is self-contained. `api/extract.ts` does not import from `src/`; the frontend detects the customer and sends the extraction instructions in the request body.
 
 ### 2.3 Infrastructure & Hosting
 
-| Service            | Provider         | Plan        | Notes                                     |
-| ------------------ | ---------------- | ----------- | ----------------------------------------- |
-| Hosting + CDN      | Vercel           | Hobby / Pro | Global edge network, auto HTTPS           |
-| Serverless compute | Vercel Functions | Included    | Node.js 20.x managed runtime              |
-| Source control     | GitHub           | Free / Team | Repository: RogerChouSPC/ARMT-INVOICE-OCR |
-| CI/CD              | Vercel + GitHub  | Automatic   | Every push to `master` triggers a deploy  |
+| Service         | Provider                            | Notes                                              |
+| --------------- | ----------------------------------- | -------------------------------------------------- |
+| Hosting         | Company server                      | Runs the Docker container; managed by company IT   |
+| Runtime         | Docker                              | Node.js 20 container built from `app/Dockerfile`   |
+| TLS / HTTPS     | Company server                      | Certificate + reverse proxy provided by IT         |
+| Container image | GitHub Container Registry (ghcr.io) | Image built and stored by GitHub Actions           |
+| Source control  | GitHub                              | Repository: RogerChouSPC/ARMT-INVOICE-OCR          |
+| CI/CD           | GitHub Actions                      | Every push to `master` builds an image and deploys |
 
 ### 2.4 External APIs
 
@@ -170,19 +174,23 @@ read (OCR vs direct text) and what extraction instructions are sent to the AI.
 
 | Area             | Implementation                                               |
 | ---------------- | ------------------------------------------------------------ |
-| Transport        | HTTPS enforced by Vercel (TLS 1.2/1.3)                       |
-| API keys         | Stored as Vercel environment variables, never in source code |
+| Transport        | HTTPS terminated by the company server (TLS)                 |
+| API keys         | Stored as server environment variables, never in source code |
 | Data persistence | None — invoices are never written to disk or database        |
 | Access control   | Any valid Microsoft account in the tenant can log in         |
 | Input validation | Invoice text truncated to 40,000 chars before sending to AI  |
 
 ### Environment Variables Required
 
-| Variable               | Where Set        | Purpose                          |
-| ---------------------- | ---------------- | -------------------------------- |
-| `OPENROUTER_API_KEY`   | Vercel dashboard | AI API access                    |
-| `VITE_AZURE_CLIENT_ID` | Vercel dashboard | Azure app registration client ID |
-| `VITE_AZURE_TENANT_ID` | Vercel dashboard | Azure AD tenant ID               |
+| Variable               | Where Set                   | Purpose                          |
+| ---------------------- | --------------------------- | -------------------------------- |
+| `OPENROUTER_API_KEY`   | Server `.env` (secret)      | AI API access                    |
+| `VITE_AZURE_CLIENT_ID` | Build arg / `.env` (public) | Azure app registration client ID |
+| `VITE_AZURE_TENANT_ID` | Build arg / `.env` (public) | Azure AD tenant ID               |
+
+`VITE_AZURE_*` values are baked into the browser bundle at build time and are not
+secret. `OPENROUTER_API_KEY` is read by the server at runtime and must be kept
+out of the source code and the Docker image.
 
 ---
 
@@ -230,17 +238,14 @@ server applies a deterministic override based on the customer config:
 
 ## 6. Pricing & Cost Model
 
-### Vercel Hosting
+### Server Hosting
 
-| Plan  | Cost               | Limits                                                            | Recommendation             |
-| ----- | ------------------ | ----------------------------------------------------------------- | -------------------------- |
-| Hobby | Free               | 100 GB bandwidth, 100K function calls/month, 10s function timeout | Suitable for low volume    |
-| Pro   | $20 USD/user/month | Unlimited bandwidth, 1M function calls/month, 60s timeout         | Recommended for production |
+Hosting runs on a company-owned server, so there is no per-request hosting fee.
+The cost is the server itself (a VM or physical host) plus IT maintenance time.
+A small Linux VM (around 2 vCPU / 2 GB RAM) is sufficient for this workload.
 
-> **Note:** Hobby plan has a **10-second serverless function timeout**. With
-> parallel OCR each `/api/ocr` call is a single page (short), but a 40,000-char
-> `/api/extract` call on a large document can run long. Pro plan (60s timeout)
-> is recommended for production use.
+Unlike the previous Vercel setup, there is **no function timeout** — large
+multi-page documents that used to time out now complete normally.
 
 ### OpenRouter / Gemini 2.5 Flash
 
@@ -272,15 +277,15 @@ Pricing is per token (1 token ≈ 0.75 words in English, less for Thai).
 - Public repository: Free
 - Private repository: $4 USD/user/month (GitHub Team)
 
-### Total Monthly Estimate (500 invoices, Pro plan)
+### Total Monthly Estimate (500 invoices)
 
-| Item            | Cost                  |
-| --------------- | --------------------- |
-| Vercel Pro      | $20 USD               |
-| OpenRouter (AI) | ~$3 USD               |
-| Azure AD        | $0 (included in M365) |
-| GitHub          | $0–$4 USD             |
-| **Total**       | **~$23–27 USD/month** |
+| Item            | Cost                                  |
+| --------------- | ------------------------------------- |
+| Company server  | Internal — no per-request hosting fee |
+| OpenRouter (AI) | ~$3 USD                               |
+| Azure AD        | $0 (included in M365)                 |
+| GitHub          | $0–$4 USD                             |
+| **Total**       | **~$3–7 USD/month + server cost**     |
 
 ---
 
@@ -290,7 +295,7 @@ Pricing is per token (1 token ≈ 0.75 words in English, less for Thai).
 
 | Scenario                                | Status                                                    |
 | --------------------------------------- | --------------------------------------------------------- |
-| Multiple users uploading simultaneously | Supported — Vercel auto-scales serverless                 |
+| Multiple users uploading simultaneously | Supported — limited by the server's CPU / memory          |
 | Bulk upload (10–20 files at once)       | Supported — files processed sequentially per user         |
 | Multi-page file                         | Pages OCR'd in parallel — fast regardless of page count   |
 | 500 invoices/month                      | Comfortably within free/pro tier                          |
@@ -300,18 +305,17 @@ Pricing is per token (1 token ≈ 0.75 words in English, less for Thai).
 
 | Bottleneck                       | Threshold                            | Mitigation                                              |
 | -------------------------------- | ------------------------------------ | ------------------------------------------------------- |
-| Vercel function timeout          | 10s (Hobby) / 60s (Pro)              | Upgrade to Pro; OCR calls are per-page (short)          |
+| Server CPU / memory              | Sustained heavy concurrent load      | Increase the VM size, or run multiple containers behind a load balancer |
 | OpenRouter rate limits           | ~60 requests/min                     | Parallel OCR fires N calls per file; add retry/backoff for very high volume |
 | Extract text truncation          | 40,000 chars (very large documents)  | Chunk text by page and merge multiple extract calls     |
 | No persistent storage            | Data lost on browser close           | Add database layer (see Section 9)                      |
 
 ### Horizontal Scaling
 
-Vercel serverless functions scale to zero when idle and auto-scale on demand —
-**no manual action required**. Parallel OCR means a single multi-page file
-fires multiple concurrent function invocations; Vercel scales these
-automatically. The only manual scaling decision is the **Vercel plan tier**
-(Hobby → Pro for the higher timeout and call quota).
+The app runs as a Docker container, so it does not auto-scale on its own.
+For higher load, run multiple containers behind a reverse proxy / load
+balancer, or move the container to a larger server. For the expected
+accounting-team volume, a single container on a modest VM is sufficient.
 
 ---
 
@@ -320,18 +324,21 @@ automatically. The only manual scaling decision is the **Vercel plan tier**
 ```
 Developer pushes code to GitHub (master branch)
           ↓
-Vercel webhook triggered automatically
+GitHub Actions runs (.github/workflows/deploy.yml)
           ↓
-Vercel runs: tsc -b && vite build
+Builds the Docker image (tsc -b && vite build run inside the image)
           ↓
-If build passes → deployed to production (spc-ocr.vercel.app)
+Pushes the image to GitHub Container Registry (ghcr.io)
           ↓
-If build fails → previous version stays live, developer notified
+Connects to the company server over SSH
+          ↓
+Server runs: docker compose pull && docker compose up -d
 ```
 
-- **Zero-downtime deploys** — Vercel swaps to the new version atomically
-- **Instant rollback** — one click in the Vercel dashboard reverts to any previous deployment
-- **Preview deployments** — every pull request gets its own preview URL for testing
+- **Rollback** — re-deploy a previous image tag (each build is tagged with its commit SHA)
+- **Restart safety** — `restart: unless-stopped` brings the app back after a server reboot
+- **Required GitHub secrets** — listed at the top of `.github/workflows/deploy.yml`
+  (Azure IDs, server SSH host/user/key, deploy path, registry pull token)
 
 ---
 
@@ -340,7 +347,7 @@ If build fails → previous version stays live, developer notified
 ### Limitation 1 — No Data Persistence
 
 **Issue:** Extracted data exists only in the browser session. Closing the tab loses all data.
-**Recommendation:** Add a database (e.g. Vercel Postgres / PlanetScale) to store extraction history with timestamps, user, and file name.
+**Recommendation:** Add a database (e.g. PostgreSQL, run as another Docker container) to store extraction history with timestamps, user, and file name.
 **Effort:** Medium (2–3 days)
 
 ### Limitation 2 — No Audit Trail
@@ -380,6 +387,7 @@ If build fails → previous version stays live, developer notified
 ```
 roger_spc_ocr_collab/
 ├── README.md                         ← Project overview (GitHub front page)
+├── .github/workflows/deploy.yml      ← CI/CD: build image + deploy to server
 ├── project_doc/
 │   ├── CEO_Overview.md               ← Executive summary
 │   └── IT_Director_Technical.md      ← This document
@@ -388,10 +396,12 @@ roger_spc_ocr_collab/
 │       ├── Customer Master.xlsx      ← Vendor mapping table
 │       ├── sample_invoices/          ← Sample PDFs for testing (one per customer)
 │       └── alloutput.xlsx            ← Last extraction output
-└── vercel/                           ← All application source code
+└── app/                              ← All application source code
     ├── api/
-    │   ├── ocr.ts                    ← Serverless: image OCR via Gemini Vision
-    │   └── extract.ts                ← Serverless: structured extraction (self-contained)
+    │   ├── ocr.ts                    ← API route: image OCR via Gemini Vision
+    │   └── extract.ts                ← API route: structured extraction (self-contained)
+    ├── server/
+    │   └── index.ts                  ← Express server: API routes + serves the website
     ├── src/
     │   ├── App.tsx                   ← Main app logic + processing pipeline
     │   ├── auth/                     ← Microsoft MSAL authentication
@@ -403,8 +413,10 @@ roger_spc_ocr_collab/
     │   │   ├── pdfRenderer.ts         ← PDF page → PNG image for OCR
     │   │   └── excelExporter.ts       ← Excel file generation
     │   └── types/invoice.ts          ← TypeScript types + column definitions
+    ├── Dockerfile                    ← Builds the container image
+    ├── docker-compose.yml            ← Runs the container on the server
+    ├── .env.example                  ← Environment variable template
     ├── package.json
-    ├── vercel.json                   ← Routing rules
     └── vite.config.ts                ← Build configuration
 ```
 
@@ -418,12 +430,13 @@ roger_spc_ocr_collab/
 
 | Resource                  | Location                                               |
 | ------------------------- | ------------------------------------------------------ |
-| Live site                 | https://spc-ocr.vercel.app                             |
+| Live site                 | Company server — internal URL (ask IT)                 |
 | Source code               | https://github.com/RogerChouSPC/ARMT-INVOICE-OCR       |
-| Vercel dashboard          | https://vercel.com (login with project owner account)  |
-| OpenRouter API key        | Vercel environment variables (contact project owner)   |
+| Deployment pipeline       | GitHub → Actions tab (`.github/workflows/deploy.yml`)  |
+| Container image           | GitHub → Packages (ghcr.io)                            |
+| OpenRouter API key        | Server `.env` file (contact project owner / IT)        |
 | Azure AD app registration | Azure Portal → App registrations → SPC OCR Invoice     |
 
 ---
 
-*Last updated: May 2026*
+*Last updated: May 2026 — migrated from Vercel to Docker / company-server hosting.*

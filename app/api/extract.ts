@@ -1,9 +1,9 @@
 import type { Request, Response } from 'express'
 
 // Customer rules live in src/config/customers.ts (single source of truth, used by
-// the frontend). A Vercel serverless function cannot reliably import across the
-// src/ boundary at runtime (ERR_MODULE_NOT_FOUND), so the frontend detects the
-// customer and sends the resulting instructions + directives in the request body.
+// the frontend). The API stays self-contained and does not import from src/ — the
+// frontend detects the customer and sends the resulting instructions + directives
+// in the request body.
 
 const DEFAULT_CUSTOMER_SECTION = `DETECTED CUSTOMER: unknown — use general rules.
 vendor_customercode: a code in [brackets]/(parentheses) near the company name or ชื่อผู้ซื้อ line; otherwise a labelled รหัสร้านค้า / Customer Code. Strip vendor prefixes from hyphenated codes (e.g. "TOP-M802316" → "802316").

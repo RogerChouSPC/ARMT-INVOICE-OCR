@@ -28,7 +28,7 @@ Makro · Lotus · Big C · 7-Eleven (CP ALL) · The Mall · AEON · Central Food
 
 ## Live Site
 
-**https://spc-ocr.vercel.app**
+Hosted on the company server — ask IT for the internal URL.
 
 ---
 
@@ -43,7 +43,7 @@ There are two layers, depending on what you need:
 
 **2. Extraction rules** (how to read that vendor's invoice — OCR vs text, where the
 vendor code / branch are, special field rules)
-- Add or edit one entry in [`vercel/src/config/customers.ts`](vercel/src/config/customers.ts)
+- Add or edit one entry in [`app/src/config/customers.ts`](app/src/config/customers.ts)
 - Each customer is a single config block: match keywords, OCR mode, vendor-code
   source, branch handling, and free-text AI notes
 - Requires a developer and a redeploy (a quick change — typically under a day)
@@ -55,18 +55,21 @@ vendor code / branch are, special field rules)
 | Layer        | Technology                                  |
 | ------------ | ------------------------------------------- |
 | Frontend     | React 18 + TypeScript + Vite + Tailwind CSS |
-| Backend      | Vercel Serverless Functions (Node.js)       |
+| Backend      | Express server (Node.js)                    |
 | AI / OCR     | Google Gemini 2.5 Flash via OpenRouter      |
 | Auth         | Microsoft Azure AD (MSAL)                   |
 | PDF Engine   | PDF.js (client-side)                        |
 | Excel Export | SheetJS (client-side)                       |
-| Hosting      | Vercel (global CDN)                         |
+| Hosting      | Docker container on the company server      |
+| CI/CD        | GitHub Actions (build image + deploy)       |
 | Source Code  | GitHub                                      |
 
 Key files:
-- `vercel/src/config/customers.ts` — per-customer extraction rule table
-- `vercel/api/extract.ts` — structured data extraction
-- `vercel/api/ocr.ts` — image OCR
+- `app/src/config/customers.ts` — per-customer extraction rule table
+- `app/api/extract.ts` — structured data extraction
+- `app/api/ocr.ts` — image OCR
+- `app/server/index.ts` — Express server (serves the API + website)
+- `app/Dockerfile`, `app/docker-compose.yml` — container build + run
 
 See [`project_doc/IT_Director_Technical.md`](project_doc/IT_Director_Technical.md) for full technical documentation.
 

@@ -2,8 +2,5 @@ node_modules/
 dist/
 .env
 .env.local
-.vercel/
 *.local
 *.tsbuildinfo
-
-.vercel

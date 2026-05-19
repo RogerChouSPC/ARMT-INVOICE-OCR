@@ -76,7 +76,7 @@ Staff clicks **Download Excel** and receives a formatted spreadsheet with all ex
 - Staff log in using their **existing company Microsoft (Office 365) account**
 - No new passwords to remember
 - No invoice data is stored permanently — files are processed and discarded
-- Hosted on a secure, globally distributed cloud platform
+- Hosted on the company's own server, inside the company's control
 
 ---
 
@@ -94,10 +94,10 @@ Each supplier's invoice format is tuned individually, so the system reads each o
 
 | Item | Monthly Cost (Est.) |
 |---|---|
-| Web hosting (Vercel) | Free – $20 USD |
+| Web hosting (company server) | Internal — no per-request fee |
 | AI processing (per invoice) | ~$0.01–0.03 USD |
 | Microsoft login (Azure AD) | Included in M365 license |
-| **Total for ~500 invoices/month** | **< $35 USD/month** |
+| **Total for ~500 invoices/month** | **< $15 USD/month + server cost** |
 
 The system pays for itself after processing just a few invoices worth of staff time.
 
