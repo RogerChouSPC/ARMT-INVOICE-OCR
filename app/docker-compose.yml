@@ -1,23 +1,20 @@
-# Run the app on the company server with:  docker compose up -d
+# Run on the company server:  docker compose up -d --build
 #
-# Requires a .env file next to this file containing:
-#   OPENROUTER_API_KEY=...   (secret — the AI API key)
-#   VITE_AZURE_CLIENT_ID=... (public — Azure app registration client ID)
-#   VITE_AZURE_TENANT_ID=... (public — Azure AD tenant ID)
-#
-# On the company server, `docker compose pull` fetches the image built by
-# GitHub Actions. For a local build instead, run `docker compose build`.
+# Requires app/.env (copy from app/.env.example). Never commit .env.
 
 services:
   app:
-    image: ghcr.io/rogerchouspc/armt-invoice-ocr:latest
+    image: armt-invoice-ocr:local
+    container_name: armt-invoice-ocr
     build:
       context: .
       args:
         VITE_AZURE_CLIENT_ID: ${VITE_AZURE_CLIENT_ID}
         VITE_AZURE_TENANT_ID: ${VITE_AZURE_TENANT_ID}
+        VITE_BASE_PATH: ${VITE_BASE_PATH:-/armt-invoice-ocr/}
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
+    env_file: .env
     environment:
       PORT: 3000
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}

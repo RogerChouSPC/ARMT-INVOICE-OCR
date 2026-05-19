@@ -1,67 +1,32 @@
-# Build the Docker image on every push to master and deploy it to the
-# company server. This replaces Vercel's automatic deploys.
-#
-# Required GitHub repository secrets (Settings -> Secrets and variables -> Actions):
-#   VITE_AZURE_CLIENT_ID  - Azure app registration client ID (public value)
-#   VITE_AZURE_TENANT_ID  - Azure AD tenant ID (public value)
-#   DEPLOY_HOST           - company server hostname or IP
-#   DEPLOY_USER           - SSH username on the server
-#   DEPLOY_SSH_KEY        - private SSH key authorized on the server
-#   DEPLOY_PATH           - folder on the server holding docker-compose.yml
-#   GHCR_PULL_TOKEN       - GitHub token (read:packages) so the server can pull the image
+# CI: verify the Docker image builds on push to master.
+# Production deploy is done on the server via OliveTin (git pull + docker compose build).
+# See deploy/README.md.
 
-name: Build and Deploy
+name: CI Build
 
 on:
   push:
     branches: [master]
+  pull_request:
+    branches: [master]
   workflow_dispatch:
 
 jobs:
-  build-and-push:
+  build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push image
+      - name: Build image (no push)
         uses: docker/build-push-action@v6
         with:
           context: ./app
           file: ./app/Dockerfile
-          push: true
-          tags: |
-            ghcr.io/rogerchouspc/armt-invoice-ocr:latest
-            ghcr.io/rogerchouspc/armt-invoice-ocr:${{ github.sha }}
+          push: false
           build-args: |
-            VITE_AZURE_CLIENT_ID=${{ secrets.VITE_AZURE_CLIENT_ID }}
-            VITE_AZURE_TENANT_ID=${{ secrets.VITE_AZURE_TENANT_ID }}
-
-  deploy:
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy to company server over SSH
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          script: |
-            cd ${{ secrets.DEPLOY_PATH }}
-            echo "${{ secrets.GHCR_PULL_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            docker compose pull
-            docker compose up -d
-            docker image prune -f
+            VITE_AZURE_CLIENT_ID=00000000-0000-0000-0000-000000000000
+            VITE_AZURE_TENANT_ID=00000000-0000-0000-0000-000000000000
+            VITE_BASE_PATH=/armt-invoice-ocr/

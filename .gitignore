@@ -1,3 +1,6 @@
+# Local IDE / agent config (not part of the app)
+.claude/
+
 # Build output
 node_modules/
 dist/

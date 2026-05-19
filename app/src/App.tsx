@@ -18,6 +18,8 @@ import { EMPTY_ROW } from '@/types/invoice'
 
 type Tab = 'ocr' | 'customer-master'
 
+const apiUrl = (path: string) => `${import.meta.env.BASE_URL}api/${path}`
+
 export default function App() {
   const { user, loading, error, logout, getToken } = useAuth()
   const [activeTab, setActiveTab]       = useState<Tab>('ocr')
@@ -71,7 +73,7 @@ export default function App() {
         if (!useOcr) {
           updateStatus(i, { state: 'extracting', progress: 50 })
           const token = await getToken()
-          const res = await fetch('/api/extract', {
+          const res = await fetch(apiUrl('extract'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
             body: JSON.stringify({ text: pdfText, filename: file.name, customerMaster, ...customerPayload }),
@@ -92,7 +94,7 @@ export default function App() {
           const ocrToken = await getToken()
           let ocrDone = 0
           const ocrTexts = await Promise.all(pages.map(async (page, p) => {
-            const ocrRes = await fetch('/api/ocr', {
+            const ocrRes = await fetch(apiUrl('ocr'), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', ...(ocrToken ? { Authorization: `Bearer ${ocrToken}` } : {}) },
               body: JSON.stringify({ image: page.base64 }),
@@ -109,7 +111,7 @@ export default function App() {
           }))
           updateStatus(i, { state: 'extracting', progress: 80 })
           const extractToken = await getToken()
-          const extractRes = await fetch('/api/extract', {
+          const extractRes = await fetch(apiUrl('extract'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...(extractToken ? { Authorization: `Bearer ${extractToken}` } : {}) },
             body: JSON.stringify({ text: ocrTexts.join('\n\n--- PAGE BREAK ---\n\n'), filename: file.name, customerMaster, ...customerPayload }),
