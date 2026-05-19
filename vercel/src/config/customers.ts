@@ -307,7 +307,7 @@ export function buildCustomerInstructions(rule: CustomerRule | null): string {
   if (!rule) {
     return `DETECTED CUSTOMER: unknown — use general rules.
 ${vendorCodeInstruction('auto')}
-vendor_branch: if the vendor (issuer) company designation anywhere on the invoice includes "สำนักงานใหญ่" (and this refers to the vendor company, NOT to สหพัฒนพิบูล / our company), return "00000". Otherwise, use only an explicitly labelled branch ("สาขาที่", "Branch", "Site code"); "Group [number]" is NOT a branch; return "" if none found.`
+vendor_branch: if the vendor (issuer) company designation anywhere on the invoice includes "สำนักงานใหญ่", "Head Office", "HQ", or similar head-office indicators (and this refers to the vendor company, NOT to สหพัฒนพิบูล / our company), return "00000". Otherwise, use only an explicitly labelled branch ("สาขาที่", "Branch", "Site code"); "Group [number]" is NOT a branch; return "" if none found.`
   }
 
   const lines: string[] = [`DETECTED CUSTOMER: ${rule.label}`, vendorCodeInstruction(rule.vendorCode)]
@@ -315,7 +315,7 @@ vendor_branch: if the vendor (issuer) company designation anywhere on the invoic
   if (rule.vendorBranch === 'blank') {
     lines.push('vendor_branch: always return "" (blank).')
   } else {
-    lines.push('vendor_branch: if the vendor (issuer) company designation anywhere on the invoice includes "สำนักงานใหญ่" (and this refers to the vendor company, NOT to สหพัฒนพิบูล / our company), return "00000". Otherwise, use only an explicitly labelled branch ("สาขาที่", "Branch", "Site code"); "Group [number]" is NOT a branch; return "" if none found.')
+    lines.push('vendor_branch: if the vendor (issuer) company designation anywhere on the invoice includes "สำนักงานใหญ่", "Head Office", "HQ", or similar head-office indicators (and this refers to the vendor company, NOT to สหพัฒนพิบูล / our company), return "00000". Otherwise, use only an explicitly labelled branch ("สาขาที่", "Branch", "Site code"); "Group [number]" is NOT a branch; return "" if none found.')
   }
 
   if (rule.notes) lines.push(rule.notes)
