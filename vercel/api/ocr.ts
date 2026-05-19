@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node'
+import type { Request, Response } from 'express'
 
 async function verifyAzureToken(authHeader: string | undefined): Promise<boolean> {
   if (!authHeader?.startsWith('Bearer ')) return false
@@ -15,7 +15,7 @@ async function verifyAzureToken(authHeader: string | undefined): Promise<boolean
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 const MODEL = 'google/gemini-2.5-flash'
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: Request, res: Response) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' })
   }

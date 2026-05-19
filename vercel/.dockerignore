@@ -1,0 +1,10 @@
+node_modules
+dist
+.git
+.env
+.env.local
+.vercel
+*.tsbuildinfo
+*.local
+Dockerfile
+docker-compose.yml
