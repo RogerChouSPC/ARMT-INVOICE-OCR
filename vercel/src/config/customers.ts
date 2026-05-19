@@ -59,7 +59,7 @@ export const CUSTOMER_RULES: CustomerRule[] = [
   {
     id: 'CFM',
     label: 'Central Food (CFM)',
-    match: { filenameKeywords: ['cfm'] },
+    match: { filenameKeywords: ['cfm'], nameKeywords: ['เซ็นทรัลฟู้ด มินิมาร์เก็ต', 'central food minimart'], taxids: ['0105535133093'] },
     extractMode: 'ocr',
     vendorCode: 'blank',
     vendorBranch: 'blank',
@@ -222,17 +222,17 @@ function filenameMatches(filename: string, keywords: string[]): boolean {
 }
 
 // Identify which customer an invoice belongs to.
-// Priority: filename keyword → issuer tax id → company-name keyword.
+// Priority: issuer tax id → company-name keyword → filename keyword (last resort).
 export function detectCustomer(invoiceText: string, filename: string): CustomerRule | null {
-  for (const r of CUSTOMER_RULES) {
-    if (r.match.filenameKeywords && filenameMatches(filename, r.match.filenameKeywords)) return r
-  }
   for (const r of CUSTOMER_RULES) {
     if (r.match.taxids?.some((t) => invoiceText.includes(t))) return r
   }
   const lower = invoiceText.toLowerCase()
   for (const r of CUSTOMER_RULES) {
     if (r.match.nameKeywords?.some((k) => lower.includes(k.toLowerCase()))) return r
+  }
+  for (const r of CUSTOMER_RULES) {
+    if (r.match.filenameKeywords && filenameMatches(filename, r.match.filenameKeywords)) return r
   }
   return null
 }
