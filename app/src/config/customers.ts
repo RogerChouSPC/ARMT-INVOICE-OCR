@@ -24,7 +24,7 @@ export type ExtractMode = 'auto' | 'ocr' | 'text'
 //   'blank'          — always empty                              (HomePro, LT, ...)
 //   'auto'           — try buyer-line, then header-bracket        (default)
 export type VendorCodeSource =
-  | 'buyer-line' | 'header-bracket' | 'ac-no' | 'vendor-no' | 'customer-line' | 'blank' | 'auto'
+  | 'buyer-line' | 'header-bracket' | 'ac-no' | 'vendor-no' | 'customer-line' | 'top-m-line' | 'blank' | 'auto'
 
 export interface CustomerRule {
   id: string
@@ -46,9 +46,9 @@ export const CUSTOMER_RULES: CustomerRule[] = [
     label: 'Central Food Retail (CFR)',
     match: { filenameKeywords: ['cfr'], nameKeywords: ['เซ็นทรัล ฟู้ด รีเทล'], taxids: ['0105535134278'] },
     extractMode: 'ocr',
-    vendorCode: 'buyer-line',
+    vendorCode: 'top-m-line',
     vendorBranch: 'blank',
-    notes: 'remark = the full text from the "หมายเหตุ" section through the "สำหรับร้านค้า" section as printed.',
+    notes: 'vendor_customercode = the digits after "TOP-M" on the เจ้าของ/ตัวแทน(รหัสร้านค้า) line (e.g. "TOP-M802316" → "802316"). remark = the full text from the "หมายเหตุ" section through the "สำหรับร้านค้า" section as printed.',
   },
   {
     id: 'CMK',
@@ -294,6 +294,8 @@ function vendorCodeInstruction(src: VendorCodeSource): string {
       return 'vendor_customercode: the value printed in the "Vendor No" field.'
     case 'customer-line':
       return 'vendor_customercode: the code our company (the buyer) was assigned by this vendor. Find it next to a customer/buyer/account-code label (รหัสลูกค้า / รหัสลูกหนี้ / รหัสผู้ซื้อ / รหัสร้านค้า / Customer Code / Customer No / "Customer:"), or as the leading code on the ชื่อลูกค้า / ชื่อผู้ซื้อ line, or a code in (parentheses) after our company name. It is NOT the vendor_branch and NOT the vendor company name.'
+    case 'top-m-line':
+      return 'vendor_customercode: the digits after "TOP-M" on the เจ้าของ/ตัวแทน(รหัสร้านค้า) line (e.g. "TOP-M802316" → "802316"). (Also enforced automatically.)'
     case 'blank':
       return 'vendor_customercode: always return "" (blank).'
     case 'auto':
