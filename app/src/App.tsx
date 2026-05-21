@@ -110,11 +110,24 @@ export default function App() {
             return text as string
           }))
           updateStatus(i, { state: 'extracting', progress: 80 })
+          // Scanned PDFs have no embedded text, so pdfText may be empty/garbled
+          // and the initial detectCustomer() above may have returned null.
+          // Re-detect from the assembled OCR text now that we have real content.
+          const ocrCombined = ocrTexts.join('\n\n--- PAGE BREAK ---\n\n')
+          const effectiveRule = customerRule ?? detectCustomer(ocrCombined, file.name)
+          const effectivePayload = effectiveRule === customerRule
+            ? customerPayload
+            : {
+                customerId:           effectiveRule?.id ?? null,
+                customerInstructions: buildCustomerInstructions(effectiveRule),
+                vendorCode:           effectiveRule?.vendorCode  ?? 'auto',
+                vendorBranch:         effectiveRule?.vendorBranch ?? 'auto',
+              }
           const extractToken = await getToken()
           const extractRes = await fetch(apiUrl('extract'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...(extractToken ? { Authorization: `Bearer ${extractToken}` } : {}) },
-            body: JSON.stringify({ text: ocrTexts.join('\n\n--- PAGE BREAK ---\n\n'), filename: file.name, customerMaster, ...customerPayload }),
+            body: JSON.stringify({ text: ocrCombined, filename: file.name, customerMaster, ...effectivePayload }),
           })
           if (!extractRes.ok) {
             const err = await extractRes.json().catch(() => ({ error: `HTTP ${extractRes.status}` }))

@@ -162,7 +162,10 @@ export const CUSTOMER_RULES: CustomerRule[] = [
   {
     id: 'MAKRO',
     label: 'Makro',
-    match: { filenameKeywords: ['makro'], nameKeywords: ['makro', 'แม็คโคร', 'cp axtra', 'ซีพี แอ็กซ์ตร้า'] },
+    match: {
+      filenameKeywords: ['makro', 'ซีพีแอ็กซ์ตร้า'],
+      nameKeywords: ['makro', 'แม็คโคร', 'cp axtra', 'ซีพี แอ็กซ์ตร้า', 'ซีพีแอ็กซ์ตร้า'],
+    },
     extractMode: 'ocr',
     vendorCode: 'customer-line',
     vendorBranch: 'auto',
