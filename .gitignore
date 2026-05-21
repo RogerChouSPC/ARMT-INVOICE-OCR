@@ -21,3 +21,10 @@ vercel/node_modules/
 vercel/dist/
 vercel/.vercel/
 vercel/vercel/
+
+# Python app
+python_app/__pycache__/
+python_app/**/__pycache__/
+python_app/.venv/
+python_app/ocr_cache/
+*.extracted.xlsx
