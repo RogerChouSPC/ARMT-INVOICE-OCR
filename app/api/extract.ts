@@ -179,7 +179,7 @@ export default async function handler(req: Request, res: Response) {
     return res.status(400).json({ error: 'Expected { text: string, filename?: string, customerMaster?: array }' })
   }
 
-  const truncated = text.length > 200000 ? text.slice(0, 200000) + '\n[truncated]' : text
+  const truncated = text.length > 750000 ? text.slice(0, 750000) + '\n[truncated]' : text
 
   try {
     const apiRes = await fetch(OPENROUTER_URL, {
