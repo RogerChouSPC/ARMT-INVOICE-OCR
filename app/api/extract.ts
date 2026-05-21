@@ -243,7 +243,7 @@ export default async function handler(req: Request, res: Response) {
     // Deterministically calculate vat_7 = amount × 0.07 for every row.
     if (customerId === 'MAKRO') {
       rows = rows.map((r) => {
-        const amt = parseFloat(r.amount as string)
+        const amt = parseFloat((r.amount as string)?.replace(/,/g, '') ?? '')
         const vat = isNaN(amt) ? '0' : (amt * 0.07).toFixed(2)
         return { ...r, vat_7: vat }
       })
