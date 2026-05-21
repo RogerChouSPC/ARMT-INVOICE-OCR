@@ -182,6 +182,20 @@ function hasNonZeroVat(invoiceText: string): boolean {
 }
 
 /**
+ * Returns true when the invoice page contains a non-zero withholding-tax 3% note
+ * ("อัตราร้อยละ 3 จำนวน <amount>").  Used as a separate trigger from hasNonZeroVat
+ * because some invoices have 0.00 VAT but still carry WHT 3% — in that case we
+ * must still calculate tax_3 = amount × 0.03 per line (the LLM copies the grand
+ * total into every row instead of calculating per-line).
+ */
+function hasWithholdingTax3(invoiceText: string): boolean {
+  const m = invoiceText.match(/อัตราร้อยละ\s*3\s*จำนวน\s*([\d,]+\.\d{2})/)
+  if (!m) return false
+  const amount = parseFloat(m[1].replace(/,/g, ''))
+  return !isNaN(amount) && amount > 0
+}
+
+/**
  * Isolate the page of the combined OCR text that contains a given invoice number.
  * Pages are separated by "--- PAGE BREAK ---" (inserted by the frontend).
  * Falls back to the whole document if the invoice number is not found.
@@ -301,33 +315,42 @@ export default async function handler(req: Request, res: Response) {
       rows = rows.map((r) => ({ ...r, vendor_branch: '' }))
     }
 
-    // Some invoices (e.g. Makro) print only a grand-total VAT/WHT, not per-line.
-    // Calculate per-line ONLY for rows whose own invoice page has non-zero VAT.
-    // A multi-page PDF may mix invoices with and without VAT — page isolation
-    // prevents a VAT line on page 2 from triggering calculation for page 1 rows.
-    //   vat_7     = amount × 0.07
-    //   tax_3     = amount × 0.03  (withholding tax 3%)
-    //   netamount = (amount + vat_7) − tax_3
-    if (hasNonZeroVat(text)) {
-      // Cache per invoice number so we don't re-scan the text for every row.
-      const vatCache = new Map<string, boolean>()
+    // Some invoices (e.g. Makro) print only grand-total VAT/WHT, not per-line.
+    // Two independent triggers, checked per-invoice page (not whole document):
+    //   hasNonZeroVat   → vat_7 = amount × 0.07
+    //   hasWHT3         → tax_3 = amount × 0.03
+    // If either fires → netamount = (amount + vat_7) − tax_3
+    //
+    // They are separate because some invoices have 0.00 VAT but still carry
+    // WHT 3% — in that case the LLM copies the grand-total WHT into every row;
+    // we must override tax_3 with the per-line calculation regardless.
+    if (hasNonZeroVat(text) || hasWithholdingTax3(text)) {
+      // Cache flags per invoice number to avoid re-scanning for every row.
+      type Flags = { applyVat: boolean; applyWht3: boolean }
+      const cache = new Map<string, Flags>()
+
       rows = rows.map((r) => {
         const invoiceNo = (r.invoiceno as string) || ''
-        if (!vatCache.has(invoiceNo)) {
+        if (!cache.has(invoiceNo)) {
           const pageText = getInvoicePageSection(text, invoiceNo)
-          vatCache.set(invoiceNo, hasNonZeroVat(pageText))
+          cache.set(invoiceNo, {
+            applyVat:  hasNonZeroVat(pageText),
+            applyWht3: hasWithholdingTax3(pageText),
+          })
         }
-        if (!vatCache.get(invoiceNo)) return r   // this invoice has 0.00 VAT → skip
+        const { applyVat, applyWht3 } = cache.get(invoiceNo)!
+        if (!applyVat && !applyWht3) return r  // nothing to override on this page
 
         const amt = parseFloat((r.amount as string)?.replace(/,/g, '') ?? '')
         if (isNaN(amt)) return { ...r, vat_7: '0', tax_3: '0' }
-        const vat7 = amt * 0.07
-        const tax3 = amt * 0.03
+
+        const vat7 = applyVat  ? amt * 0.07 : 0
+        const tax3 = applyWht3 ? amt * 0.03 : 0
         const net  = amt + vat7 - tax3
         return {
           ...r,
-          vat_7:     vat7.toFixed(2),
-          tax_3:     tax3.toFixed(2),
+          vat_7:     applyVat  ? vat7.toFixed(2) : '0',
+          tax_3:     applyWht3 ? tax3.toFixed(2) : '0',
           netamount: net.toFixed(2),
         }
       })
