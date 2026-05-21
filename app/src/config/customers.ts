@@ -166,7 +166,7 @@ export const CUSTOMER_RULES: CustomerRule[] = [
     extractMode: 'ocr',
     vendorCode: 'customer-line',
     vendorBranch: 'auto',
-    notes: 'vendor_customercode = the number in (parentheses) after our company name on the "ได้รับเงินจาก" line (e.g. 2128209).',
+    notes: 'vendor_customercode = the number in (parentheses) after our company name on the "ได้รับเงินจาก" line (e.g. 2128209). vat_7: calculate as amount × 0.07 for each line item (Makro prints only the total VAT, not per-line — this overrides the general no-calculate rule).',
   },
   {
     id: 'TFG',

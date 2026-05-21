@@ -161,6 +161,7 @@ export default async function handler(req: Request, res: Response) {
   let customerSection: string
   let vendorCode: string
   let vendorBranch: string
+  let customerId: string
   try {
     const body = req.body || {}
     text = (body.text || '').trim()
@@ -169,6 +170,7 @@ export default async function handler(req: Request, res: Response) {
     customerSection = (body.customerInstructions || '').trim() || DEFAULT_CUSTOMER_SECTION
     vendorCode = body.vendorCode || 'auto'
     vendorBranch = body.vendorBranch || 'auto'
+    customerId = (body.customerId || '').toUpperCase()
     const cm = body.customerMaster
     customerMasterJson = (Array.isArray(cm) && cm.length > 0)
       ? JSON.stringify(cm.map(({ store_name, customergroup, customercode, taxid }: {
@@ -227,6 +229,16 @@ export default async function handler(req: Request, res: Response) {
 
     if (vendorBranch === 'blank') {
       rows = rows.map((r) => ({ ...r, vendor_branch: '' }))
+    }
+
+    // Makro: invoice only prints total VAT, not per-line.
+    // Deterministically calculate vat_7 = amount × 0.07 for every row.
+    if (customerId === 'MAKRO') {
+      rows = rows.map((r) => {
+        const amt = parseFloat(r.amount as string)
+        const vat = isNaN(amt) ? '0' : (amt * 0.07).toFixed(2)
+        return { ...r, vat_7: vat }
+      })
     }
 
     return res.status(200).json({ rows })
