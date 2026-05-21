@@ -410,10 +410,20 @@ export default async function handler(req: Request, res: Response) {
       })
     }
 
-    // Makro: hard-code description and product_description from raw OCR text.
-    // The LLM cannot reliably parse the two-line layout so we do it here:
-    //   line with the amount   → product_description (the detail line)
-    //   line immediately above → description         (the category heading)
+    // Makro: hard-code description and product_description.
+    //
+    // The LLM consistently:
+    //   - puts the category heading (e.g. "Retro Bonus") in product_description ← correct value, wrong field
+    //   - puts the receipt header "ได้รับชำระเงินตามรายการดังนี้" in description ← useless
+    //
+    // The OCR text structure has Gemini merge or skip the heading-only lines,
+    // so "line above the amount" is NOT the category heading — it's things like
+    // "N", "Amount", or the previous row's amount.  But the text ON the amount
+    // line (before the number) IS the correct detail text.
+    //
+    // Strategy:
+    //   description         ← LLM's product_description  (category heading — LLM gets this right)
+    //   product_description ← OCR text before the amount  (detail line — OCR extraction gets this right)
     if (isMAKRO) {
       const pageTextCache = new Map<string, string>()
       const usedByPage    = new Map<string, Set<number>>()
@@ -426,12 +436,13 @@ export default async function handler(req: Request, res: Response) {
         const pageText = pageTextCache.get(invoiceNo)!
         const used     = usedByPage.get(invoiceNo)!
         const found    = findMakroItemLines(pageText, (r.amount as string) || '', used)
-        if (!found) return r
-        return {
-          ...r,
-          description:         found.description         || (r.description as string),
-          product_description: found.product_description || (r.product_description as string),
-        }
+
+        // description: use LLM's product_description (it's actually the category heading)
+        const newDescription = (r.product_description as string) || (r.description as string)
+        // product_description: use OCR-extracted text before the amount on the same line
+        const newProductDesc = found?.product_description || (r.product_description as string)
+
+        return { ...r, description: newDescription, product_description: newProductDesc }
       })
     }
 
