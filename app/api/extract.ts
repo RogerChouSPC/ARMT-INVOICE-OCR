@@ -317,14 +317,15 @@ export default async function handler(req: Request, res: Response) {
 
     // Some invoices (e.g. Makro) print only grand-total VAT/WHT, not per-line.
     // Two independent triggers, checked per-invoice page (not whole document):
-    //   hasNonZeroVat   → vat_7 = amount × 0.07
-    //   hasWHT3         → tax_3 = amount × 0.03
+    //   applyVat  → vat_7 = amount × 0.07  (non-zero ภาษีมูลค่าเพิ่ม on that page)
+    //   applyWht3 → tax_3 = amount × 0.03  (WHT 3% note on that page, OR Makro always)
     // If either fires → netamount = (amount + vat_7) − tax_3
     //
-    // They are separate because some invoices have 0.00 VAT but still carry
-    // WHT 3% — in that case the LLM copies the grand-total WHT into every row;
-    // we must override tax_3 with the per-line calculation regardless.
-    if (hasNonZeroVat(text) || hasWithholdingTax3(text)) {
+    // For Makro (customerId === 'MAKRO') WHT3 is always present — we use it as a
+    // reliable fallback because Gemini OCR sometimes renders the Thai paragraph
+    // containing "อัตราร้อยละ 3 จำนวน" in a format the regex does not match.
+    const isMAKRO = customerId === 'MAKRO'
+    if (isMAKRO || hasNonZeroVat(text) || hasWithholdingTax3(text)) {
       // Cache flags per invoice number to avoid re-scanning for every row.
       type Flags = { applyVat: boolean; applyWht3: boolean }
       const cache = new Map<string, Flags>()
@@ -335,7 +336,8 @@ export default async function handler(req: Request, res: Response) {
           const pageText = getInvoicePageSection(text, invoiceNo)
           cache.set(invoiceNo, {
             applyVat:  hasNonZeroVat(pageText),
-            applyWht3: hasWithholdingTax3(pageText),
+            // Makro always has WHT3; text detection covers other vendors.
+            applyWht3: isMAKRO || hasWithholdingTax3(pageText),
           })
         }
         const { applyVat, applyWht3 } = cache.get(invoiceNo)!

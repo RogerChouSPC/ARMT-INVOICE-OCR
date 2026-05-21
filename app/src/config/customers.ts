@@ -167,10 +167,13 @@ export const CUSTOMER_RULES: CustomerRule[] = [
     vendorCode: 'customer-line',
     vendorBranch: 'auto',
     notes: `vendor_customercode = the number in (parentheses) after our company name on the "ได้รับเงินจาก" line (e.g. 2128209).
-TWO-LINE ITEM LAYOUT — each line item is printed as two lines in the รายละเอียด/Description column:
-  Line 1 (NO amount on this line): the short category heading → put this in "description" (e.g. "Promotion/Markdown Deal", "Retro Bonus", "ค่ากระจายสินค้า", "Data Providing Deal/MSP").
-  Line 2 (SAME line as the amount on the right): the specific detail → put this in "product_description" (e.g. "DF2026036574 Promotion Support based on Sale", "Retro Bonus 2026", "Backhaul Wangnoi", "Data Providing Deal/MSP 2026").
-  RULE: description = the line ABOVE the amount; product_description = the line ON THE SAME LINE as the amount. Never swap them.
+TWO-LINE ITEM LAYOUT — each line item in the รายละเอียด/Description column is printed as EXACTLY two lines:
+  Line 1 — the short category/charge-type heading, printed WITHOUT an amount on the right side → this is "description".
+    Examples: "Promotion/Markdown Deal", "Retro Bonus", "Store Celebration", "Data Providing Deal/MSP", "ค่ากระจายสินค้า"
+  Line 2 — the specific detail text printed ON THE SAME LINE as the baht amount on the right → this is "product_description".
+    Examples: "DF2026036574 Promotion Support based on Sale", "Retro Bonus 2026", "Store Celebration 2026", "Data Providing Deal/MSP 2026", "Backhaul Wangnoi", "ค่ากระจายสินค้า 2026"
+CRITICAL — "ได้รับชำระเงินตามรายการดังนี้" is a receipt header printed above the table. It is NEVER a description — do NOT put it in description for any row.
+RULE: description = the line WITHOUT an amount (the heading); product_description = the line WITH the amount (the detail). Never swap them.
 vat_7: calculate as amount × 0.07 for each line item (Makro prints only the total VAT, not per-line — this overrides the general no-calculate rule).`,
   },
   {
