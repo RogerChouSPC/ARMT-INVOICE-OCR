@@ -181,6 +181,28 @@ function hasNonZeroVat(invoiceText: string): boolean {
   return false
 }
 
+/**
+ * Isolate the page of the combined OCR text that contains a given invoice number.
+ * Pages are separated by "--- PAGE BREAK ---" (inserted by the frontend).
+ * Falls back to the whole document if the invoice number is not found.
+ *
+ * This allows per-invoice VAT detection in a multi-invoice PDF — e.g. page 1
+ * has invoice A (0.00 VAT) and page 2 has invoice B (non-zero VAT).  Without
+ * page isolation, a document-level check would wrongly trigger calculations
+ * for invoice A because VAT was found somewhere else in the document.
+ */
+function getInvoicePageSection(invoiceText: string, invoiceNo: string): string {
+  const PAGE_BREAK = '--- PAGE BREAK ---'
+  if (!invoiceNo) return invoiceText
+  const idx = invoiceText.indexOf(invoiceNo)
+  if (idx < 0) return invoiceText
+  const before = invoiceText.lastIndexOf(PAGE_BREAK, idx)
+  const start  = before < 0 ? 0 : before + PAGE_BREAK.length
+  const after  = invoiceText.indexOf(PAGE_BREAK, idx)
+  const end    = after  < 0 ? invoiceText.length : after
+  return invoiceText.slice(start, end)
+}
+
 /** Convert YYYY-MM-DD → DD/MM/YYYY. Passes through anything that doesn't match. */
 function isoToDmy(date: string): string {
   if (!date) return date
@@ -280,14 +302,23 @@ export default async function handler(req: Request, res: Response) {
     }
 
     // Some invoices (e.g. Makro) print only a grand-total VAT/WHT, not per-line.
-    // Trigger ONLY when the raw text has a non-zero ภาษีมูลค่าเพิ่ม line —
-    // if the invoice has 0.00 VAT, skip all three overrides and leave the
-    // LLM output as-is (no VAT, no withholding, netamount = amount).
+    // Calculate per-line ONLY for rows whose own invoice page has non-zero VAT.
+    // A multi-page PDF may mix invoices with and without VAT — page isolation
+    // prevents a VAT line on page 2 from triggering calculation for page 1 rows.
     //   vat_7     = amount × 0.07
     //   tax_3     = amount × 0.03  (withholding tax 3%)
     //   netamount = (amount + vat_7) − tax_3
     if (hasNonZeroVat(text)) {
+      // Cache per invoice number so we don't re-scan the text for every row.
+      const vatCache = new Map<string, boolean>()
       rows = rows.map((r) => {
+        const invoiceNo = (r.invoiceno as string) || ''
+        if (!vatCache.has(invoiceNo)) {
+          const pageText = getInvoicePageSection(text, invoiceNo)
+          vatCache.set(invoiceNo, hasNonZeroVat(pageText))
+        }
+        if (!vatCache.get(invoiceNo)) return r   // this invoice has 0.00 VAT → skip
+
         const amt = parseFloat((r.amount as string)?.replace(/,/g, '') ?? '')
         if (isNaN(amt)) return { ...r, vat_7: '0', tax_3: '0' }
         const vat7 = amt * 0.07
