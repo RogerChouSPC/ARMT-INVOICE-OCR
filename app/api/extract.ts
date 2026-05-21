@@ -280,11 +280,13 @@ export default async function handler(req: Request, res: Response) {
     }
 
     // Some invoices (e.g. Makro) print only a grand-total VAT/WHT, not per-line.
-    // When the raw text contains a non-zero ภาษีมูลค่าเพิ่ม line, calculate per-line:
+    // Trigger ONLY when the raw text has a non-zero ภาษีมูลค่าเพิ่ม line —
+    // if the invoice has 0.00 VAT, skip all three overrides and leave the
+    // LLM output as-is (no VAT, no withholding, netamount = amount).
     //   vat_7     = amount × 0.07
     //   tax_3     = amount × 0.03  (withholding tax 3%)
     //   netamount = (amount + vat_7) − tax_3
-    if (customerId === 'MAKRO' || hasNonZeroVat(text)) {
+    if (hasNonZeroVat(text)) {
       rows = rows.map((r) => {
         const amt = parseFloat((r.amount as string)?.replace(/,/g, '') ?? '')
         if (isNaN(amt)) return { ...r, vat_7: '0', tax_3: '0' }
