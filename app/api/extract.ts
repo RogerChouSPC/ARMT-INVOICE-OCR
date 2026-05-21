@@ -141,6 +141,14 @@ function extractHeaderVendorCode(invoiceText: string, mode: 'buyer-line' | 'head
   return null
 }
 
+/** Convert YYYY-MM-DD → DD/MM/YYYY. Passes through anything that doesn't match. */
+function isoToDmy(date: string): string {
+  if (!date) return date
+  const m = date.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!m) return date
+  return `${m[3]}/${m[2]}/${m[1]}`
+}
+
 export default async function handler(req: Request, res: Response) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' })
@@ -240,6 +248,13 @@ export default async function handler(req: Request, res: Response) {
         return { ...r, vat_7: vat }
       })
     }
+
+    // Convert dates from YYYY-MM-DD → DD/MM/YYYY for all customers.
+    rows = rows.map((r) => ({
+      ...r,
+      invoicedate: isoToDmy(r.invoicedate as string),
+      duedate:     isoToDmy(r.duedate as string),
+    }))
 
     return res.status(200).json({ rows })
   } catch (err) {
