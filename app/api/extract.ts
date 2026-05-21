@@ -217,6 +217,58 @@ function getInvoicePageSection(invoiceText: string, invoiceNo: string): string {
   return invoiceText.slice(start, end)
 }
 
+/**
+ * For Makro invoices: locate a line item in the OCR page text by its printed
+ * amount and extract the two-line description layout:
+ *   - The line ON THE SAME LINE as the amount → product_description (detail)
+ *   - The line IMMEDIATELY ABOVE the amount  → description (category heading)
+ *
+ * Makro prints each item as:
+ *   "Data Providing Deal/MSP"              ← description (no amount)
+ *   "Data Providing Deal/MSP 2026  7,326.53"  ← product_description + amount
+ *
+ * usedPositions prevents the same text position being matched twice when
+ * multiple line items share the same amount value.
+ */
+function findMakroItemLines(
+  pageText: string,
+  amountRaw: string,
+  usedPositions: Set<number>,
+): { description: string; product_description: string } | null {
+  const amtNum = parseFloat((amountRaw || '').replace(/,/g, ''))
+  if (isNaN(amtNum) || amtNum <= 0) return null
+  // Makro prints amounts with thousands separators: 7,326.53 / 115,600.00
+  const formatted = amtNum.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+
+  let from = 0
+  while (from < pageText.length) {
+    const idx = pageText.indexOf(formatted, from)
+    if (idx < 0) break
+    if (!usedPositions.has(idx)) {
+      usedPositions.add(idx)
+
+      // Line that contains the amount
+      const lineStart = pageText.lastIndexOf('\n', idx - 1) + 1
+      const lineEnd   = pageText.indexOf('\n', idx)
+      const line      = pageText.slice(lineStart, lineEnd > 0 ? lineEnd : pageText.length)
+
+      // product_description = everything before the amount on that line
+      const product_description = line.slice(0, line.indexOf(formatted)).trim()
+
+      // description = the line immediately above
+      const prevEnd   = lineStart > 0 ? lineStart - 1 : 0
+      const prevStart = pageText.lastIndexOf('\n', prevEnd - 1) + 1
+      const description = pageText.slice(prevStart, prevEnd).trim()
+
+      if (description || product_description) {
+        return { description, product_description }
+      }
+    }
+    from = idx + 1
+  }
+  return null
+}
+
 /** Convert YYYY-MM-DD → DD/MM/YYYY. Passes through anything that doesn't match. */
 function isoToDmy(date: string): string {
   if (!date) return date
@@ -354,6 +406,31 @@ export default async function handler(req: Request, res: Response) {
           vat_7:     applyVat  ? vat7.toFixed(2) : '0',
           tax_3:     applyWht3 ? tax3.toFixed(2) : '0',
           netamount: net.toFixed(2),
+        }
+      })
+    }
+
+    // Makro: hard-code description and product_description from raw OCR text.
+    // The LLM cannot reliably parse the two-line layout so we do it here:
+    //   line with the amount   → product_description (the detail line)
+    //   line immediately above → description         (the category heading)
+    if (isMAKRO) {
+      const pageTextCache = new Map<string, string>()
+      const usedByPage    = new Map<string, Set<number>>()
+      rows = rows.map((r) => {
+        const invoiceNo = (r.invoiceno as string) || ''
+        if (!pageTextCache.has(invoiceNo)) {
+          pageTextCache.set(invoiceNo, getInvoicePageSection(text, invoiceNo))
+          usedByPage.set(invoiceNo, new Set())
+        }
+        const pageText = pageTextCache.get(invoiceNo)!
+        const used     = usedByPage.get(invoiceNo)!
+        const found    = findMakroItemLines(pageText, (r.amount as string) || '', used)
+        if (!found) return r
+        return {
+          ...r,
+          description:         found.description         || (r.description as string),
+          product_description: found.product_description || (r.product_description as string),
         }
       })
     }
