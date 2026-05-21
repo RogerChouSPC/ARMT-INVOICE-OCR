@@ -146,16 +146,39 @@ function extractHeaderVendorCode(invoiceText: string, mode: 'buyer-line' | 'head
  * with a non-zero amount.  Used to trigger per-line vat_7 / tax_3 / netamount
  * calculation when the vendor only prints a grand-total VAT, not per-line.
  *
- * Matches Thai VAT summary patterns, e.g.:
- *   "ภาษีมูลค่าเพิ่ม (VAT)  23,939.28"
- *   "ภาษีมูลค่าเพิ่ม 7%  1,234.00"
+ * Strategy: Makro (and similar) invoices put the VAT label on the left and the
+ * amount in the far-right column of the same OCR line — but they also embed a
+ * long descriptive paragraph in the middle (withholding-tax note), so a short
+ * character-count window misses the number.  We collect ALL decimal numbers on
+ * the same line and take the LAST one (= rightmost column = VAT total).
+ * If the line has no decimals we fall back to scanning the next 4 lines.
  */
 function hasNonZeroVat(invoiceText: string): boolean {
-  // Find ภาษีมูลค่าเพิ่ม then skip any non-digit chars (label/%), capture the amount.
-  const m = invoiceText.match(/ภาษีมูลค่าเพิ่ม[^0-9\r\n]{0,40}([\d,]+\.?\d*)/)
-  if (!m) return false
-  const vat = parseFloat(m[1].replace(/,/g, ''))
-  return !isNaN(vat) && vat > 0
+  const idx = invoiceText.indexOf('ภาษีมูลค่าเพิ่ม')
+  if (idx < 0) return false
+
+  const from = invoiceText.slice(idx)
+
+  // --- same-line check (handles "ภาษีมูลค่าเพิ่ม ... 23,939.28" on one OCR line) ---
+  const eol = from.indexOf('\n')
+  const sameLine = eol > 0 ? from.slice(0, eol) : from.slice(0, 1000)
+  const sameLineNums = [...sameLine.matchAll(/([\d,]+\.\d{2})/g)]
+  if (sameLineNums.length > 0) {
+    // Last decimal on the line = rightmost column = VAT total
+    const last = parseFloat(sameLineNums[sameLineNums.length - 1][1].replace(/,/g, ''))
+    return !isNaN(last) && last > 0
+  }
+
+  // --- multi-line fallback (amount on its own line in the right column) ---
+  const lines = from.split(/\r?\n/)
+  for (let i = 1; i <= Math.min(4, lines.length - 1); i++) {
+    const m = lines[i].match(/([\d,]+\.\d{2})/)
+    if (m) {
+      const val = parseFloat(m[1].replace(/,/g, ''))
+      if (!isNaN(val) && val > 0) return true
+    }
+  }
+  return false
 }
 
 /** Convert YYYY-MM-DD → DD/MM/YYYY. Passes through anything that doesn't match. */
