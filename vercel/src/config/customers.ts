@@ -15,16 +15,18 @@
 export type ExtractMode = 'auto' | 'ocr' | 'text'
 
 // Where vendor_customercode (the code the vendor assigned to OUR company) is found:
-//   'buyer-line'     — ( CODE ) on the ชื่อผู้ซื้อ line          (CMK, CFR)
+//   'buyer-line'     — ( CODE ) on the ชื่อผู้ซื้อ line          (CMK)
 //   'header-bracket' — [CODE] / (CODE) after the company name    (BTM, CFW)
 //   'ac-no'          — value of the "A/C No" field
 //   'vendor-no'      — value of the "Vendor No" field            (PTT)
 //   'customer-line'  — code on the labelled customer line:       (Big C, CJ, CP All)
 //                      รหัสลูกค้า / รหัสลูกหนี้ / start of ชื่อลูกค้า
+//   'top-m-line'     — digits after "TOP-M" on the              (CFR)
+//                      เจ้าของ/ตัวแทน(รหัสร้านค้า) TOP-M{code} line
 //   'blank'          — always empty                              (HomePro, LT, ...)
 //   'auto'           — try buyer-line, then header-bracket        (default)
 export type VendorCodeSource =
-  | 'buyer-line' | 'header-bracket' | 'ac-no' | 'vendor-no' | 'customer-line' | 'blank' | 'auto'
+  | 'buyer-line' | 'header-bracket' | 'ac-no' | 'vendor-no' | 'customer-line' | 'top-m-line' | 'blank' | 'auto'
 
 export interface CustomerRule {
   id: string
@@ -46,9 +48,9 @@ export const CUSTOMER_RULES: CustomerRule[] = [
     label: 'Central Food Retail (CFR)',
     match: { filenameKeywords: ['cfr'], nameKeywords: ['เซ็นทรัล ฟู้ด รีเทล'], taxids: ['0105535134278'] },
     extractMode: 'ocr',
-    vendorCode: 'buyer-line',
+    vendorCode: 'top-m-line',
     vendorBranch: 'blank',
-    notes: 'remark = the full text from the "หมายเหตุ" section through the "สำหรับร้านค้า" section as printed.',
+    notes: 'vendor_customercode = the digits after "TOP-M" on the เจ้าของ/ตัวแทน(รหัสร้านค้า) line (e.g. "TOP-M802316" → "802316"). remark = the full text from the "หมายเหตุ" section through the "สำหรับร้านค้า" section as printed.',
   },
   {
     id: 'CMK',

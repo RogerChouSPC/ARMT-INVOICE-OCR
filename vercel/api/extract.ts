@@ -109,13 +109,23 @@ function parseJsonFromText(text: string): object[] {
 const BLANK_VENDOR_CODE_NAMES = ['homepro', 'home product', 'lotus', 'makro', 'tfg', 'villa', 'watson']
 
 // Deterministically extract vendor_customercode from the raw invoice text.
-// Two real layouts (verified against sample PDFs):
-//   buyer-line     — ( CODE ) on the ชื่อผู้ซื้อ line, e.g. "...จำกัด ( 042501)"  (CMK, CFR)
+// Three real layouts (verified against sample PDFs):
+//   buyer-line     — ( CODE ) on the ชื่อผู้ซื้อ line, e.g. "...จำกัด ( 042501)"  (CMK)
 //   header-bracket — [CODE] right after the vendor company name             (BTM, CFW)
+//   top-m-line     — digits after TOP-M on เจ้าของ/ตัวแทน(รหัสร้านค้า) line (CFR)
+//                    e.g. "เจ้าของ/ตัวแทน(รหัสร้านค้า) TOP-M802316" → "802316"
 // pdf.js joins all text with spaces and brackets may contain inner spaces — hence \s*.
-function extractHeaderVendorCode(invoiceText: string, mode: 'buyer-line' | 'header-bracket' | 'auto'): string | null {
+function extractHeaderVendorCode(invoiceText: string, mode: 'buyer-line' | 'header-bracket' | 'top-m-line' | 'auto'): string | null {
   const head = invoiceText.slice(0, 800)
   if (mode === 'auto' && BLANK_VENDOR_CODE_NAMES.some((n) => head.toLowerCase().includes(n))) return null
+
+  if (mode === 'top-m-line') {
+    // CFR: เจ้าของ/ตัวแทน(รหัสร้านค้า) TOP-M{vendor_customercode}
+    // OCR may insert spaces inside "TOP-M" or between it and the digits, so allow \s* throughout.
+    const m = invoiceText.match(/เจ้าของ[^\n\r]{0,60}TOP[\s-]*M[\s]*(\d+)/)
+    if (m) return m[1]
+    return null
+  }
 
   if (mode === 'buyer-line' || mode === 'auto') {
     const buyerIdx = invoiceText.search(/ชื่อผู้ซื้อ|ผู้ซื้อ/)
@@ -211,8 +221,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Config-driven post-processing — deterministic overrides per customer.
     if (vendorCode === 'blank') {
       rows = rows.map((r) => ({ ...r, vendor_customercode: '' }))
-    } else if (vendorCode === 'buyer-line' || vendorCode === 'header-bracket' || vendorCode === 'auto') {
-      // 'ac-no' / 'vendor-no' are left to the LLM (those invoices are scanned/OCR'd)
+    } else if (vendorCode === 'buyer-line' || vendorCode === 'header-bracket' || vendorCode === 'top-m-line' || vendorCode === 'auto') {
+      // 'ac-no' / 'vendor-no' / 'customer-line' are left to the LLM (those invoices are scanned/OCR'd)
       const code = extractHeaderVendorCode(text, vendorCode)
       if (code) rows = rows.map((r) => ({ ...r, vendor_customercode: code }))
     }
