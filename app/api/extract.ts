@@ -239,13 +239,24 @@ export default async function handler(req: Request, res: Response) {
       rows = rows.map((r) => ({ ...r, vendor_branch: '' }))
     }
 
-    // Makro: invoice only prints total VAT, not per-line.
-    // Deterministically calculate vat_7 = amount × 0.07 for every row.
+    // Makro: invoice prints only total VAT/WHT, not per-line amounts.
+    // Deterministically calculate per-line:
+    //   vat_7     = amount × 0.07
+    //   tax_3     = amount × 0.03  (withholding tax 3%)
+    //   netamount = (amount + vat_7) − tax_3
     if (customerId === 'MAKRO') {
       rows = rows.map((r) => {
         const amt = parseFloat((r.amount as string)?.replace(/,/g, '') ?? '')
-        const vat = isNaN(amt) ? '0' : (amt * 0.07).toFixed(2)
-        return { ...r, vat_7: vat }
+        if (isNaN(amt)) return { ...r, vat_7: '0', tax_3: '0' }
+        const vat7 = amt * 0.07
+        const tax3 = amt * 0.03
+        const net  = amt + vat7 - tax3
+        return {
+          ...r,
+          vat_7:     vat7.toFixed(2),
+          tax_3:     tax3.toFixed(2),
+          netamount: net.toFixed(2),
+        }
       })
     }
 
