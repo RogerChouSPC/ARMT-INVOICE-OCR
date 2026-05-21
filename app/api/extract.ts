@@ -141,6 +141,23 @@ function extractHeaderVendorCode(invoiceText: string, mode: 'buyer-line' | 'head
   return null
 }
 
+/**
+ * Returns true when the invoice text has a ภาษีมูลค่าเพิ่ม (VAT) summary line
+ * with a non-zero amount.  Used to trigger per-line vat_7 / tax_3 / netamount
+ * calculation when the vendor only prints a grand-total VAT, not per-line.
+ *
+ * Matches Thai VAT summary patterns, e.g.:
+ *   "ภาษีมูลค่าเพิ่ม (VAT)  23,939.28"
+ *   "ภาษีมูลค่าเพิ่ม 7%  1,234.00"
+ */
+function hasNonZeroVat(invoiceText: string): boolean {
+  // Find ภาษีมูลค่าเพิ่ม then skip any non-digit chars (label/%), capture the amount.
+  const m = invoiceText.match(/ภาษีมูลค่าเพิ่ม[^0-9\r\n]{0,40}([\d,]+\.?\d*)/)
+  if (!m) return false
+  const vat = parseFloat(m[1].replace(/,/g, ''))
+  return !isNaN(vat) && vat > 0
+}
+
 /** Convert YYYY-MM-DD → DD/MM/YYYY. Passes through anything that doesn't match. */
 function isoToDmy(date: string): string {
   if (!date) return date
@@ -239,12 +256,12 @@ export default async function handler(req: Request, res: Response) {
       rows = rows.map((r) => ({ ...r, vendor_branch: '' }))
     }
 
-    // Makro: invoice prints only total VAT/WHT, not per-line amounts.
-    // Deterministically calculate per-line:
+    // Some invoices (e.g. Makro) print only a grand-total VAT/WHT, not per-line.
+    // When the raw text contains a non-zero ภาษีมูลค่าเพิ่ม line, calculate per-line:
     //   vat_7     = amount × 0.07
     //   tax_3     = amount × 0.03  (withholding tax 3%)
     //   netamount = (amount + vat_7) − tax_3
-    if (customerId === 'MAKRO') {
+    if (customerId === 'MAKRO' || hasNonZeroVat(text)) {
       rows = rows.map((r) => {
         const amt = parseFloat((r.amount as string)?.replace(/,/g, '') ?? '')
         if (isNaN(amt)) return { ...r, vat_7: '0', tax_3: '0' }
