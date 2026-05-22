@@ -447,6 +447,17 @@ export default async function handler(req: Request, res: Response) {
       })
     }
 
+    // CFR: remark must stop before "Netting" — everything from "Netting" onwards
+    // is payment/netting info, not a remark.  Hard-code the truncation so the LLM
+    // never accidentally includes it even if the prompt is partially followed.
+    if (customerId === 'CFR') {
+      rows = rows.map((r) => {
+        const remark = (r.remark as string) || ''
+        const cut = remark.indexOf('Netting')
+        return cut > 0 ? { ...r, remark: remark.slice(0, cut).trim() } : r
+      })
+    }
+
     // Convert dates from YYYY-MM-DD → DD/MM/YYYY for all customers.
     rows = rows.map((r) => ({
       ...r,

@@ -48,7 +48,7 @@ export const CUSTOMER_RULES: CustomerRule[] = [
     extractMode: 'ocr',
     vendorCode: 'top-m-line',
     vendorBranch: 'blank',
-    notes: 'vendor_customercode = the digits after "TOP-M" on the เจ้าของ/ตัวแทน(รหัสร้านค้า) line (e.g. "TOP-M802316" → "802316"). remark = the full text from the "หมายเหตุ" section through the "สำหรับร้านค้า" section as printed.',
+    notes: 'vendor_customercode = the digits after "TOP-M" on the เจ้าของ/ตัวแทน(รหัสร้านค้า) line (e.g. "TOP-M802316" → "802316"). remark = the text from the "หมายเหตุ" line, stopping BEFORE the word "Netting" — do not include "Netting" or anything after it.',
   },
   {
     id: 'CMK',
