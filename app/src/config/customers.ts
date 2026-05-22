@@ -164,7 +164,7 @@ remark = the text from the "หมายเหตุ" line: if "Netting" appears
       filenameKeywords: ['lt', 'lotus'],
       nameKeywords: ['โลตัส', 'lotus', 'นวมินทร์'],
     },
-    extractMode: 'text',
+    extractMode: 'ocr',
     vendorCode: 'customer-line',
     vendorBranch: 'auto',
     notes: `vendor_customercode = the number immediately after "VENDOR NO" on the VENDOR NO line (e.g. "VENDOR NO 90607" → "90607").
