@@ -49,7 +49,7 @@ export const CUSTOMER_RULES: CustomerRule[] = [
     vendorCode: 'top-m-line',
     vendorBranch: 'blank',
     notes: `vendor_customercode = the digits after "TOP-M" on the เจ้าของ/ตัวแทน(รหัสร้านค้า) line (e.g. "TOP-M802316" → "802316").
-description = the text on the "รายการ" line (e.g. "Gondolar").
+description = the text AFTER the "รายการ" label — do NOT include the word "รายการ" itself (e.g. line reads "รายการ Gondolar" → description = "Gondolar").
 product_description = the text after "สินค้า :" if that line is present (e.g. "8850002041622 ไลปอนเอฟเอ็กซ์ตร้าใช้จีนิดผลิตภัณฑ์ล้างจานเข้มข้น 1700มล."); leave "" if no "สินค้า :" line.
 amount = the "รวม" subtotal (before VAT and tax).
 vat_7 = copy the amount printed on the "บวกภาษีมูลค่าเพิ่ม 7%(บาท)" line exactly (e.g. "700.00"); do NOT calculate.
