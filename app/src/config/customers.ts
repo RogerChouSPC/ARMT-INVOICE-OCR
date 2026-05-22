@@ -153,11 +153,23 @@ export const CUSTOMER_RULES: CustomerRule[] = [
   {
     id: 'LT',
     label: 'Lotus (LT)',
-    match: { filenameKeywords: ['lt', 'lotus'], nameKeywords: ['โลตัส', 'lotus'] },
+    match: {
+      filenameKeywords: ['lt', 'lotus'],
+      nameKeywords: ['โลตัส', 'lotus', 'นวมินทร์'],
+    },
     extractMode: 'text',
     vendorCode: 'customer-line',
     vendorBranch: 'auto',
-    notes: 'vendor_customercode = the value of the "Customer Code" / "รหัสลูกค้า" field (e.g. TH00607).',
+    notes: `vendor_customercode = the number immediately after "VENDOR NO" on the VENDOR NO line (e.g. "VENDOR NO 90607" → "90607").
+FORMAT: CREDIT NOTE COMPENSATE CONFIRMATION REPORT with columns DEAL NO / BUYER / SECTION / AMOUNT / VAT.
+Each deal occupies two lines:
+  Line 1 — DEAL NO, BUYER name, SECTION, AMOUNT, VAT  → extract all values from here.
+  Line 2 — a reference number, date range, then SKU/product detail text   → this is product_description.
+- description = the SECTION column value on line 1 (e.g. "1 PASTA+INSTANT FOOD", "4 COOKING NEEDS", "351 CP-COMMODITY", "316 HOUSEHOLD CLEANING").
+- product_description = the full detail text on line 2, verbatim (e.g. "260300001811 26/02/2026-25/03/2026 90607_WK9-12 CP24_6_MAMA BIG PACK PLUS PORK 95G").
+- amount = copy the AMOUNT column value exactly as printed.
+- vat_7 = copy the VAT column value exactly as printed (may be 0.00 or a positive amount such as 21,000.00); do NOT calculate.
+- invoiceno = the reference code at the top-right of the document (e.g. "C260400473CN3").`,
   },
   {
     id: 'MAKRO',
