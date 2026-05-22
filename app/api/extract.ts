@@ -44,6 +44,8 @@ HOW TO MAP customergroup and customercode:
    - If the same taxid has multiple entries (e.g., ซีพี แอ็กซ์ตร้า), pick the row whose store_name best matches the issuer's name in the invoice.
    - taxid 0107567000414 with "Lotus" or "โลตัส" or "LT" → group "05 - โลตัส"
    - taxid 0107567000414 with "Makro" or "แม็คโคร" → group "04 - ซีพี แอ็กซ์ตร้า(Makro)"
+   - taxid 0107567000414 with vendor address containing "นวมินทร์" (Nawamin street, e.g. "629/1 ถนนนวมินทร์") → group "05 - โลตัส"
+   - taxid 0107567000414 with vendor address containing "พัฒนาการ" (Pattanakarn street, e.g. "1468 ถนนพัฒนาการ") → group "04 - ซีพี แอ็กซ์ตร้า(Makro)"
    - taxid 0107536000633 with "คลังครอสด็อคธัญบุรี 00485" → customercode "0115526"
    - taxid 0107536000633 headquarters → customercode "0102856"
    - taxid 0105540016253 (City Mall / ซิตี้มอลล์) with branch 00001 → customercode "0114682"
@@ -458,6 +460,36 @@ export default async function handler(req: Request, res: Response) {
         const cut = cutNetting > 0 ? cutNetting : cutStore > 0 ? cutStore : -1
         return cut > 0 ? { ...r, remark: remark.slice(0, cut).trim() } : r
       })
+    }
+
+    // CP Axtra address disambiguation: Lotus (customergroup 05) and Makro (customergroup 04)
+    // share the same taxid (0107567000414).  The only reliable discriminator is the vendor's
+    // printed address.  Per-invoice page, search for the distinctive street name and override
+    // customergroup / customercode from the matching Customer Master row.
+    //   "629/1 ถนนนวมินทร์" (Nawamin)     → Lotus  → group 05
+    //   "1468 ถนนพัฒนาการ"  (Pattanakarn) → Makro  → group 04
+    {
+      const masterEntries: Array<{store_name: string; customergroup: string; customercode: string; taxid: string}> = JSON.parse(customerMasterJson)
+      const lotusEntry = masterEntries.find(e => e.taxid === '0107567000414' && e.customergroup.startsWith('05'))
+      const makroEntry = masterEntries.find(e => e.taxid === '0107567000414' && e.customergroup.startsWith('04'))
+      if (lotusEntry || makroEntry) {
+        const addrCache = new Map<string, { customergroup: string; customercode: string } | null>()
+        rows = rows.map((r) => {
+          const invoiceNo = (r.invoiceno as string) || ''
+          if (!addrCache.has(invoiceNo)) {
+            const pageText = getInvoicePageSection(text, invoiceNo)
+            if (pageText.includes('นวมินทร์') && lotusEntry) {
+              addrCache.set(invoiceNo, { customergroup: lotusEntry.customergroup, customercode: lotusEntry.customercode })
+            } else if (pageText.includes('พัฒนาการ') && makroEntry) {
+              addrCache.set(invoiceNo, { customergroup: makroEntry.customergroup, customercode: makroEntry.customercode })
+            } else {
+              addrCache.set(invoiceNo, null)
+            }
+          }
+          const override = addrCache.get(invoiceNo)
+          return override ? { ...r, ...override } : r
+        })
+      }
     }
 
     // Convert dates from YYYY-MM-DD → DD/MM/YYYY for all customers.
