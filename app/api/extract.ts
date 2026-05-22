@@ -437,12 +437,13 @@ export default async function handler(req: Request, res: Response) {
         const used     = usedByPage.get(invoiceNo)!
         const found    = findMakroItemLines(pageText, (r.amount as string) || '', used)
 
-        // description: use LLM's product_description (it's actually the category heading)
-        const newDescription = (r.product_description as string) || (r.description as string)
-        // product_description: use OCR-extracted text before the amount on the same line
+        // description: trust the LLM — with correct customer instructions it now correctly
+        //   extracts the category heading (e.g. "Retro Bonus") into description.
+        // product_description: override from OCR text (verbatim text printed before the
+        //   amount on that line, e.g. "Retro Bonus 2026").
         const newProductDesc = found?.product_description || (r.product_description as string)
 
-        return { ...r, description: newDescription, product_description: newProductDesc }
+        return { ...r, product_description: newProductDesc }
       })
     }
 
