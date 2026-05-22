@@ -379,7 +379,12 @@ export default async function handler(req: Request, res: Response) {
     // reliable fallback because Gemini OCR sometimes renders the Thai paragraph
     // containing "อัตราร้อยละ 3 จำนวน" in a format the regex does not match.
     const isMAKRO = customerId === 'MAKRO'
-    if (isMAKRO || hasNonZeroVat(text) || hasWithholdingTax3(text)) {
+    // Some customers (CFR) print VAT and WHT3 explicitly on the invoice.
+    // The LLM copies those figures directly — server-side calculation must be
+    // skipped or it overwrites the correct values (and zeroes out tax_3 because
+    // the CFR WHT3 label doesn't match our "อัตราร้อยละ 3 จำนวน" regex).
+    const skipVatCalc = customerId === 'CFR'
+    if (!skipVatCalc && (isMAKRO || hasNonZeroVat(text) || hasWithholdingTax3(text))) {
       // Cache flags per invoice number to avoid re-scanning for every row.
       type Flags = { applyVat: boolean; applyWht3: boolean }
       const cache = new Map<string, Flags>()

@@ -48,7 +48,14 @@ export const CUSTOMER_RULES: CustomerRule[] = [
     extractMode: 'ocr',
     vendorCode: 'top-m-line',
     vendorBranch: 'blank',
-    notes: 'vendor_customercode = the digits after "TOP-M" on the เจ้าของ/ตัวแทน(รหัสร้านค้า) line (e.g. "TOP-M802316" → "802316"). remark = the text from the "หมายเหตุ" line: if "Netting" appears, stop before it; otherwise stop before "สำหรับร้านค้า". Do not include either boundary word or anything after it.',
+    notes: `vendor_customercode = the digits after "TOP-M" on the เจ้าของ/ตัวแทน(รหัสร้านค้า) line (e.g. "TOP-M802316" → "802316").
+description = the text on the "รายการ" line (e.g. "Gondolar").
+product_description = the text after "สินค้า :" if that line is present (e.g. "8850002041622 ไลปอนเอฟเอ็กซ์ตร้าใช้จีนิดผลิตภัณฑ์ล้างจานเข้มข้น 1700มล."); leave "" if no "สินค้า :" line.
+amount = the "รวม" subtotal (before VAT and tax).
+vat_7 = copy the amount printed on the "บวกภาษีมูลค่าเพิ่ม 7%(บาท)" line exactly (e.g. "700.00"); do NOT calculate.
+tax_3 = copy the amount printed on the "หักภาษี ณ ที่จ่าย 3%(บาท)" line exactly (e.g. "300.00"); do NOT calculate.
+netamount = copy the "รวมเป็นเงินทั้งสิ้น (บาท)" amount exactly (e.g. "10400.00"); do NOT calculate.
+remark = the text from the "หมายเหตุ" line: if "Netting" appears, stop before it; otherwise stop before "สำหรับร้านค้า". Do not include either boundary word or anything after it.`,
   },
   {
     id: 'CMK',
