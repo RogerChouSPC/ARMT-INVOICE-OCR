@@ -447,13 +447,15 @@ export default async function handler(req: Request, res: Response) {
       })
     }
 
-    // CFR: remark must stop before "Netting" — everything from "Netting" onwards
-    // is payment/netting info, not a remark.  Hard-code the truncation so the LLM
-    // never accidentally includes it even if the prompt is partially followed.
+    // CFR: truncate remark at the first boundary word found:
+    //   1. "Netting"        — netting/payment info starts here
+    //   2. "สำหรับร้านค้า" — store instructions start here (fallback if no Netting)
     if (customerId === 'CFR') {
       rows = rows.map((r) => {
         const remark = (r.remark as string) || ''
-        const cut = remark.indexOf('Netting')
+        const cutNetting = remark.indexOf('Netting')
+        const cutStore   = remark.indexOf('สำหรับร้านค้า')
+        const cut = cutNetting > 0 ? cutNetting : cutStore > 0 ? cutStore : -1
         return cut > 0 ? { ...r, remark: remark.slice(0, cut).trim() } : r
       })
     }
