@@ -9,6 +9,10 @@ Update this file at the end of every working session.
 
 ### Completed
 
+#### LT — switch to position-based invoice-number whitelist
+- Replaced the strict anchored regex with `findLTInvoiceCandidates()` that scans the OCR text with BROAD patterns and builds a set of every invoice-number candidate that actually appears in the source.  The filter now keeps any LLM extraction whose invoiceno is present in that set.
+- Why: a tight `^...$` regex would reject any future Lotus variation (different digit count, optional dash, etc.) even when the value is genuinely printed on the page.  Position-based validation accepts those because the whitelist comes from the printed text — yet still drops hallucinations like "P00030007P0N" because the LLM can't fabricate something that's also coincidentally in the OCR.
+
 #### LT — drop hallucinated invoice numbers + clarify Format D VAT trap
 - **Bug**: a 15-page Lotus PDF (mixed Credit Note / Tax Invoice / Monthly Discount) produced a fake row with invoiceno `P00030007P0N` and a fabricated `vat_7` value. That invoice number doesn't exist in the PDF — it was an LLM hallucination, likely seeded by Format-D column headers (`จำนวนเงินรวม VAT 7%`, `TAB 7%`) that the LLM mistook for VAT amounts.
 - **Fix #1** (`extract.ts`): added a strict regex filter in the LT post-processing block that drops any row whose `invoiceno` doesn't match one of the 4 known LT shapes:

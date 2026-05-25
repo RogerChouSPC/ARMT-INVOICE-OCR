@@ -251,6 +251,34 @@ function convertLTVendorCode(code: string): string {
 }
 
 /**
+ * Find every plausible Lotus invoice-number candidate that ACTUALLY appears
+ * in the source text.  We use this as a whitelist for filtering LLM output:
+ * any extracted invoiceno that doesn't appear in the printed OCR text is a
+ * hallucination and gets dropped.
+ *
+ * Patterns are deliberately BROAD (loose digit counts, optional dashes) so
+ * we accept new layout variations we haven't seen yet — the safety comes
+ * from the value having to be physically present in the source text, not
+ * from matching a strict template.  This is more resilient than a tight
+ * anchored regex (^...$) which would reject any legitimate-but-unfamiliar
+ * shape.
+ */
+function findLTInvoiceCandidates(text: string): Set<string> {
+  const found = new Set<string>()
+  const patterns: RegExp[] = [
+    /\bC\d{6,14}(?:CN|CV)\d{0,3}\b/gi,  // Format A — Credit Note      e.g. C260400519CN3
+    /\bBH\d{3,8}-?\d{3,8}\b/gi,          // Format B — Tax Invoice      e.g. BH2603-00013
+    /\bA\d{8,12}\b/gi,                   // Format C — Receipt row      e.g. A260310890
+    /\bM\d{6,14}MDN\b/gi,                // Format D — Monthly Discount e.g. M260410670MDN
+  ]
+  for (const re of patterns) {
+    const matches = text.match(re)
+    if (matches) for (const m of matches) found.add(m.toUpperCase().replace(/\s+/g, ''))
+  }
+  return found
+}
+
+/**
  * For Makro invoices: locate a line item in the OCR page text by its printed
  * amount and extract the two-line description layout:
  *   - The line ON THE SAME LINE as the amount → product_description (detail)
@@ -478,24 +506,20 @@ export default async function handler(req: Request, res: Response) {
     }
 
     // LT (Lotus) — three server-side fixes:
-    //   1. Drop rows whose invoiceno doesn't match any of the 4 known formats.
-    //      The LLM occasionally hallucinates plausible-looking invoice numbers
-    //      (e.g. "P00030007P0N") from misread OCR text or column headers, and
-    //      attaches fabricated VAT/amount to them.  Strict pattern filter only
-    //      keeps rows we can map to a real Lotus document.
+    //   1. Drop rows whose invoiceno isn't actually printed on the source PDF.
+    //      Build the whitelist FROM the OCR text itself (position-based) —
+    //      this way new format variations we haven't anticipated still pass,
+    //      while hallucinated invoice numbers (e.g. "P00030007P0N" fabricated
+    //      from column-header noise) get dropped because no such string exists
+    //      in the source.
     //   2. description: force invoice-level deal-type line for Formats A/D
     //      (skipped for Formats B/C where description is per-row in a table).
     //   3. vendor_customercode: convert printed "TH0XXXX" → internal "9XXXX".
     if (customerId === 'LT') {
-      // Pattern legend:
-      //   C\d{9}(CN|CV)\d   — Credit Note   (e.g. C260400519CN3)
-      //   BH\d{4}-\d{5}     — Tax Invoice   (e.g. BH2603-00013)
-      //   A\d{9}            — Receipt line  (e.g. A260310890)
-      //   M\d{9}MDN         — Monthly Disc. (e.g. M260310670MDN)
-      const LT_INVOICE_RE = /^(?:C\d{9}(?:CN|CV)\d|BH\d{4}-\d{5}|A\d{9}|M\d{9}MDN)$/i
+      const validInvoices = findLTInvoiceCandidates(text)
       rows = rows.filter((r) => {
-        const inv = ((r.invoiceno as string) || '').trim()
-        return inv !== '' && LT_INVOICE_RE.test(inv)
+        const inv = ((r.invoiceno as string) || '').trim().toUpperCase().replace(/\s+/g, '')
+        return inv !== '' && validInvoices.has(inv)
       })
 
       const ltDescCache = new Map<string, string | null>()
