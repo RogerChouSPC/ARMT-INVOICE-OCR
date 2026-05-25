@@ -220,6 +220,27 @@ function getInvoicePageSection(invoiceText: string, invoiceNo: string): string {
 }
 
 /**
+ * For Lotus (LT) invoices: find the invoice-level deal-type description line.
+ * This line appears between the VENDOR NO line and the DEAL NO table header.
+ * It always starts with a known code (JN01, JV01, SN01, etc.) or a recognised
+ * Thai/English phrase, and is shared by ALL line items in the same invoice.
+ *
+ * Returns the full trimmed line (e.g. "JN01 ส่วนลดในการร่วมกันสนับสนุนการขาย-โปรโมชัน")
+ * or null when no recognised pattern is found.
+ */
+const LT_DESC_PATTERN =
+  /\b(JN0[12]|JV0[12]|SN0[16]|SN12|SV03|ON01)\b|CIS\s+(Monthly\s+Discount|DCI\s+Discount)|ค่าขนส่ง\s*BackHaul/i
+
+function findLTDescription(pageText: string): string | null {
+  const m = LT_DESC_PATTERN.exec(pageText)
+  if (!m) return null
+  const idx = m.index
+  const lineStart = pageText.lastIndexOf('\n', idx - 1) + 1
+  const lineEnd   = pageText.indexOf('\n', idx)
+  return pageText.slice(lineStart, lineEnd > 0 ? lineEnd : pageText.length).trim() || null
+}
+
+/**
  * For Makro invoices: locate a line item in the OCR page text by its printed
  * amount and extract the two-line description layout:
  *   - The line ON THE SAME LINE as the amount → product_description (detail)
@@ -451,6 +472,23 @@ export default async function handler(req: Request, res: Response) {
         const newProductDesc = found?.product_description || (r.product_description as string)
 
         return { ...r, product_description: newProductDesc }
+      })
+    }
+
+    // LT (Lotus): hard-code description from the known deal-type code line.
+    // The line appears between VENDOR NO and the DEAL NO table header and is
+    // shared by all rows in the same invoice.  The LLM often picks the wrong
+    // line, so we scan the OCR text for the fixed pattern and force the result.
+    if (customerId === 'LT') {
+      const ltDescCache = new Map<string, string | null>()
+      rows = rows.map((r) => {
+        const invoiceNo = (r.invoiceno as string) || ''
+        if (!ltDescCache.has(invoiceNo)) {
+          const pageText = getInvoicePageSection(text, invoiceNo)
+          ltDescCache.set(invoiceNo, findLTDescription(pageText))
+        }
+        const desc = ltDescCache.get(invoiceNo)
+        return desc ? { ...r, description: desc } : r
       })
     }
 
