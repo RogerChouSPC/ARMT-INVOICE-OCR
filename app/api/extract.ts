@@ -220,24 +220,48 @@ function getInvoicePageSection(invoiceText: string, invoiceNo: string): string {
 }
 
 /**
- * For Lotus (LT) invoices: find the invoice-level deal-type description line.
- * This line appears between the VENDOR NO line and the DEAL NO table header.
- * It always starts with a known code (JN01, JV01, SN01, etc.) or a recognised
- * Thai/English phrase, and is shared by ALL line items in the same invoice.
+ * For Lotus (LT) invoices: find the INVOICE-LEVEL description that's shared
+ * across every row.  Only used for Formats A and D — for Formats B and C the
+ * description is in a per-row table column and must be left to the LLM (else
+ * we'd stomp every row with the same value).
  *
- * Returns the full trimmed line (e.g. "JN01 ส่วนลดในการร่วมกันสนับสนุนการขาย-โปรโมชัน")
- * or null when no recognised pattern is found.
+ * Format A (Credit Note): JNxx/JVxx/SNxx/SVxx/ONxx code line below VENDOR NO
+ *   → returns the full line (e.g. "JN01 ส่วนลดในการร่วมกันสนับสนุนการขาย-โปรโมชัน")
+ * Format D (Monthly Discount, invoice no ends in MDN): body mentions
+ *   "Monthly Discount" without a "CIS " prefix
+ *   → returns the literal "Monthly Discount"
+ *
+ * Returns null when no invoice-level pattern is recognised (Formats B/C, or
+ * a yet-unknown layout).
  */
-const LT_DESC_PATTERN =
-  /\b(JN0[12]|JV0[12]|SN0[16]|SN12|SV03|ON01)\b|CIS\s+(Monthly\s+Discount|DCI\s+Discount)|ค่าขนส่ง\s*BackHaul/i
-
 function findLTDescription(pageText: string): string | null {
-  const m = LT_DESC_PATTERN.exec(pageText)
-  if (!m) return null
-  const idx = m.index
-  const lineStart = pageText.lastIndexOf('\n', idx - 1) + 1
-  const lineEnd   = pageText.indexOf('\n', idx)
-  return pageText.slice(lineStart, lineEnd > 0 ? lineEnd : pageText.length).trim() || null
+  // Format A — deal-type code (returns the full matching line)
+  const codeMatch = pageText.match(/\b(?:JN0[12]|JV0[12]|SN0[16]|SN12|SV03|ON01)\b/i)
+  if (codeMatch) {
+    const idx       = codeMatch.index!
+    const lineStart = pageText.lastIndexOf('\n', idx - 1) + 1
+    const lineEnd   = pageText.indexOf('\n', idx)
+    const line      = pageText.slice(lineStart, lineEnd > 0 ? lineEnd : pageText.length).trim()
+    return line || null
+  }
+
+  // Format D — standalone "Monthly Discount" (negative lookbehind excludes
+  // "CIS Monthly Discount" which is a Format-C per-row value).
+  if (/(?<!CIS\s)Monthly\s+Discount/i.test(pageText)) return 'Monthly Discount'
+
+  return null
+}
+
+/**
+ * For Lotus (LT) invoices: Lotus prints our vendor customer code as
+ * "TH0XXXX"; our internal code is "9XXXX".  Convert by stripping "TH"
+ * and replacing the leading "0" with "9".  Codes that don't match this
+ * exact shape (e.g. plain numeric "90607" from credit notes, or Site
+ * codes like "TH10672") are returned unchanged.
+ */
+function convertLTVendorCode(code: string): string {
+  const m = code.match(/^TH0(\d+)$/i)
+  return m ? '9' + m[1] : code
 }
 
 /**
@@ -475,10 +499,10 @@ export default async function handler(req: Request, res: Response) {
       })
     }
 
-    // LT (Lotus): hard-code description from the known deal-type code line.
-    // The line appears between VENDOR NO and the DEAL NO table header and is
-    // shared by all rows in the same invoice.  The LLM often picks the wrong
-    // line, so we scan the OCR text for the fixed pattern and force the result.
+    // LT (Lotus) — two server-side overrides:
+    //   1. description: force the invoice-level deal-type line for Formats A/D
+    //      (skipped for Formats B/C where description is per-row in a table).
+    //   2. vendor_customercode: convert printed "TH0XXXX" → internal "9XXXX".
     if (customerId === 'LT') {
       const ltDescCache = new Map<string, string | null>()
       rows = rows.map((r) => {
@@ -488,7 +512,10 @@ export default async function handler(req: Request, res: Response) {
           ltDescCache.set(invoiceNo, findLTDescription(pageText))
         }
         const desc = ltDescCache.get(invoiceNo)
-        return desc ? { ...r, description: desc } : r
+        const withDesc = desc ? { ...r, description: desc } : r
+        const code = (withDesc.vendor_customercode as string) || ''
+        const converted = convertLTVendorCode(code)
+        return converted !== code ? { ...withDesc, vendor_customercode: converted } : withDesc
       })
     }
 

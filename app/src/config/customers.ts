@@ -167,13 +167,48 @@ remark = the text from the "หมายเหตุ" line: if "Netting" appears
     extractMode: 'ocr',
     vendorCode: 'customer-line',
     vendorBranch: 'auto',
-    notes: `vendor_customercode = the number immediately after "VENDOR NO" on the VENDOR NO line (e.g. "VENDOR NO 90607" → "90607").
-FORMAT: CREDIT NOTE COMPENSATE CONFIRMATION REPORT with columns DEAL NO / BUYER / SECTION / AMOUNT / VAT.
-- description = the deal-type code and text on the line immediately below the VENDOR NO line (e.g. "JN01 ส่วนลดในการร่วมกันสนับสนุนการขาย-โปรโมชัน"). This single value is shared by ALL line items in the same invoice. Recognised patterns: JN01 ส่วนลดร่วมสนับสนุนการขาย-โปรโมชั่น / JN02 ส่วนลดร่วมสนับสนุนการขาย-คูปอง / JV01 ค่ากิจกรรมการตลาดและโฆษณา / JV02 ค่าจัดเรียง/ตกแต่งชั้นวางสินค้า / SN01 ส่วนลดคะแนนสะสมสมาชิก / SN06 ค่าดำเนินการแรกเข้าสินค้าใหม่ / SN12 เงินชดเชยสินค้าจัดเก็บไม่ครบถ้วน / SV03 เงินสนับสนุนค่าบริหารจัดการ / ON01 ส่วนลดการซื้อตามสัญญา / CIS Monthly Discount / CIS DCI Discount / ค่าขนส่ง BackHaul.
-- product_description = the full detail text on the reference line below each deal row, verbatim (e.g. "260300001811 26/02/2026-25/03/2026 90607_WK9-12 CP24_6_MAMA BIG PACK PLUS PORK 95G").
-- amount = copy the AMOUNT column value exactly as printed.
-- vat_7 = copy the VAT column value exactly as printed (may be 0.00 or a positive amount such as 21,000.00); do NOT calculate.
-- invoiceno = the reference code at the top-right of the document (e.g. "C260400473CN3").`,
+    notes: `LOTUS prints invoices in 4 DISTINCT FORMATS. Identify the format from the header/layout, then follow its rules.
+
+vendor_customercode (all formats): extract the raw printed customer code (e.g. "TH00607", "90607", or "10670"). The server converts "TH0XXXX" → "9XXXX" automatically — just give the raw printed value.
+
+FORMAT A — CREDIT NOTE COMPENSATE CONFIRMATION REPORT
+Recognise by: header text "CREDIT NOTE COMPENSATE CONFIRMATION REPORT"; invoice number like "Cxxxxxxxx CN3" or "...CV3".
+- ONE ROW per DEAL line in the DEAL NO / BUYER / SECTION / AMOUNT / VAT table.
+- vendor_customercode = number after "VENDOR NO" (e.g. "VENDOR NO 90607" → "90607")
+- invoiceno = top-right reference (e.g. "C260400473CN3")
+- amount = AMOUNT column value
+- vat_7 = VAT column value verbatim (may be 0.00)
+- description = deal-type code line below VENDOR NO (e.g. "JN01 ส่วนลดในการร่วมกันสนับสนุนการขาย-โปรโมชัน") — same for all rows. Recognised codes: JN01/JN02/JV01/JV02/SN01/SN06/SN12/SV03/ON01.
+- product_description = detail reference line below each deal row (starts with 12-digit ref, then date range, then SKU info; e.g. "260300001811 26/02/2026-25/03/2026 90607_WK9-12 CP24_6_MAMA BIG PACK PLUS PORK 95G")
+
+FORMAT B — TAX INVOICE
+Recognise by: header "ใบแจ้งหนี้" + table columns "No | Item Category | Description | UOM | Quantity | Unit Price | Amount"; invoice number starts with "BH" (e.g. "BH2603-00013").
+- ONE ROW per Description-column line item.
+- vendor_customercode = "Customer Code" field value (e.g. "TH00607")
+- vendor_branch = "สาขาที่:" field value on the vendor side (e.g. "00175")
+- invoiceno = "Invoice Number" value (e.g. "BH2603-00013")
+- invoicedate = "Invoice Date" value (e.g. "31-Mar-26")
+- duedate = "Due Date" value (e.g. "07-Apr-26")
+- description = "Description" column value verbatim PER ROW (e.g. "ค่าขนส่ง BackHaul เดือน มีนาคม 2569")
+- amount = "Amount" column value
+
+FORMAT C — RECEIPT
+Recognise by: header "ใบเสร็จรับเงิน" + table columns "ลำดับ | เลขที่ใบแจ้งหนี้ | วันที่ใบแจ้งหนี้ | รายการ | จำนวนเงินตามใบแจ้งหนี้ | จำนวนเงินรับ".
+- ONE ROW per table line item.
+- vendor_customercode = "รหัสลูกค้า:" field at top-right (e.g. "TH00607") — NOT the "(Site)" code.
+- invoiceno = "เลขที่ใบแจ้งหนี้" column value PER ROW (e.g. "A260310890") — NOT the top "เลขที่" number (e.g. "282434").
+- invoicedate = "วันที่ใบแจ้งหนี้" column value PER ROW (e.g. "03-APR-26")
+- description = "รายการ" column value PER ROW verbatim (e.g. "CIS DCI Discount", "CIS Monthly Discount")
+- amount = "จำนวนเงินตามใบแจ้งหนี้" column value
+
+FORMAT D — MONTHLY DISCOUNT
+Recognise by: invoice number ending in "MDN" (e.g. "M260410670MDN"); body mentions "Monthly Discount"; has a "MONTHLY DISCOUNT CHARGE DETAIL" section.
+- ONE ROW per invoice — just the grand total. Do NOT expand the MONTHLY DISCOUNT CHARGE DETAIL table or "Monthly Discount - Net Receipt Details" table.
+- vendor_customercode = number after "VENDOR NO" or "Vendor No" (e.g. "VENDOR NO :10670" → "10670")
+- invoiceno = top-right invoice code (e.g. "M260410670MDN")
+- invoicedate = top "วันที่ <Thai date>" (e.g. "3 พฤษภาคม 2569")
+- description = "Monthly Discount" (exactly these two words)
+- amount = the grand total amount of the invoice (e.g. "253,792.81")`,
   },
   {
     id: 'MAKRO',

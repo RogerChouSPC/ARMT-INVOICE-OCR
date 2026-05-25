@@ -9,6 +9,16 @@ Update this file at the end of every working session.
 
 ### Completed
 
+#### LT — support 4 invoice formats + TH→9 vendor code conversion
+- `customers.ts`: rewrote LT `notes` as a 4-format guide. Each format has its own recognition cues and per-field mapping:
+  - **Format A** — Credit Note Compensate Confirmation Report (Cxxx CN3/CV3)
+  - **Format B** — Tax Invoice with No/Item Category/Description/UOM/Quantity/Unit Price/Amount table (BHxxxx)
+  - **Format C** — Receipt with ลำดับ/เลขที่ใบแจ้งหนี้/วันที่ใบแจ้งหนี้/รายการ/จำนวนเงิน table (282434-style)
+  - **Format D** — Monthly Discount invoice (Mxxx MDN), one row per invoice grand total
+- `extract.ts`: 
+  - `findLTDescription()` rewritten to override description ONLY for invoice-level cases (A: JNxx/JVxx/SNxx/SVxx/ONxx code line; D: standalone "Monthly Discount" via `(?<!CIS\s)` negative lookbehind). For Formats B & C, description is per-row in a table column — server returns null so LLM extraction is kept.
+  - Added `convertLTVendorCode()`: strips "TH" prefix and replaces leading "0" with "9" (e.g. "TH00607" → "90607"). Applied to all LT rows in the post-processing block. Non-matching codes (plain numeric, Site codes "TH1xxxx") pass through unchanged.
+
 #### CFR — description label fix
 - **Commit `2695aeb`**
 - LLM was including the word "รายการ" as part of the description value.
