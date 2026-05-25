@@ -169,6 +169,8 @@ remark = the text from the "หมายเหตุ" line: if "Netting" appears
     vendorBranch: 'auto',
     notes: `LOTUS prints invoices in 4 DISTINCT FORMATS. Identify the format from the header/layout, then follow its rules.
 
+NEVER calculate tax for Lotus — always copy printed values; if a field is not printed, use "0".
+
 vendor_customercode (all formats): extract the raw printed customer code (e.g. "TH00607", "90607", or "10670"). The server converts "TH0XXXX" → "9XXXX" automatically — just give the raw printed value.
 
 FORMAT A — CREDIT NOTE COMPENSATE CONFIRMATION REPORT
