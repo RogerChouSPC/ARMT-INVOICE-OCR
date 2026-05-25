@@ -454,7 +454,7 @@ export default async function handler(req: Request, res: Response) {
     // Strategy:
     //   description         ← LLM's product_description  (category heading — LLM gets this right)
     //   product_description ← OCR text before the amount  (detail line — OCR extraction gets this right)
-    if (isMAKRO) {
+    if (customerId === 'MAKRO') {
       const pageTextCache = new Map<string, string>()
       const usedByPage    = new Map<string, Set<number>>()
       rows = rows.map((r) => {
