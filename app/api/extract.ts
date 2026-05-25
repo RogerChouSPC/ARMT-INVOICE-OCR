@@ -510,7 +510,7 @@ export default async function handler(req: Request, res: Response) {
       })
     }
 
-    // LT (Lotus) — three server-side fixes:
+    // LT (Lotus) — four server-side fixes:
     //   1. Drop rows whose invoiceno isn't actually printed on the source PDF.
     //      Build the whitelist FROM the OCR text itself (position-based) —
     //      this way new format variations we haven't anticipated still pass,
@@ -520,6 +520,10 @@ export default async function handler(req: Request, res: Response) {
     //   2. description: force invoice-level deal-type line for Formats A/D
     //      (skipped for Formats B/C where description is per-row in a table).
     //   3. vendor_customercode: convert printed "TH0XXXX" → internal "9XXXX".
+    //   4. vat_7 = amount × 0.07 and netamount = amount + vat_7 for every row.
+    //      Lotus invoices print VAT = 0 because the credit-note flow doesn't
+    //      carry VAT, but accounting needs the gross-up applied internally.
+    //      Other tax fields (tax_3 etc.) are left as-is — never calculated.
     if (customerId === 'LT') {
       const validInvoices = findLTInvoiceCandidates(text)
       rows = rows.filter((r) => {
@@ -538,7 +542,12 @@ export default async function handler(req: Request, res: Response) {
         const withDesc = desc ? { ...r, description: desc } : r
         const code = (withDesc.vendor_customercode as string) || ''
         const converted = convertLTVendorCode(code)
-        return converted !== code ? { ...withDesc, vendor_customercode: converted } : withDesc
+        const withCode = converted !== code ? { ...withDesc, vendor_customercode: converted } : withDesc
+
+        const amt = parseFloat((withCode.amount as string)?.replace(/,/g, '') ?? '')
+        if (isNaN(amt)) return withCode
+        const vat7 = amt * 0.07
+        return { ...withCode, vat_7: vat7.toFixed(2), netamount: (amt + vat7).toFixed(2) }
       })
     }
 
