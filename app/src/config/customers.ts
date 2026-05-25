@@ -169,11 +169,8 @@ remark = the text from the "หมายเหตุ" line: if "Netting" appears
     vendorBranch: 'auto',
     notes: `vendor_customercode = the number immediately after "VENDOR NO" on the VENDOR NO line (e.g. "VENDOR NO 90607" → "90607").
 FORMAT: CREDIT NOTE COMPENSATE CONFIRMATION REPORT with columns DEAL NO / BUYER / SECTION / AMOUNT / VAT.
-Each deal occupies two lines:
-  Line 1 — DEAL NO, BUYER name, SECTION, AMOUNT, VAT  → extract all values from here.
-  Line 2 — a reference number, date range, then SKU/product detail text   → this is product_description.
-- description = the SECTION column value on line 1 (e.g. "1 PASTA+INSTANT FOOD", "4 COOKING NEEDS", "351 CP-COMMODITY", "316 HOUSEHOLD CLEANING").
-- product_description = the full detail text on line 2, verbatim (e.g. "260300001811 26/02/2026-25/03/2026 90607_WK9-12 CP24_6_MAMA BIG PACK PLUS PORK 95G").
+- description = the deal-type code and text on the line immediately below the VENDOR NO line (e.g. "JN01 ส่วนลดในการร่วมกันสนับสนุนการขาย-โปรโมชัน"). This single value is shared by ALL line items in the same invoice. Recognised patterns: JN01 ส่วนลดร่วมสนับสนุนการขาย-โปรโมชั่น / JN02 ส่วนลดร่วมสนับสนุนการขาย-คูปอง / JV01 ค่ากิจกรรมการตลาดและโฆษณา / JV02 ค่าจัดเรียง/ตกแต่งชั้นวางสินค้า / SN01 ส่วนลดคะแนนสะสมสมาชิก / SN06 ค่าดำเนินการแรกเข้าสินค้าใหม่ / SN12 เงินชดเชยสินค้าจัดเก็บไม่ครบถ้วน / SV03 เงินสนับสนุนค่าบริหารจัดการ / ON01 ส่วนลดการซื้อตามสัญญา / CIS Monthly Discount / CIS DCI Discount / ค่าขนส่ง BackHaul.
+- product_description = the full detail text on the reference line below each deal row, verbatim (e.g. "260300001811 26/02/2026-25/03/2026 90607_WK9-12 CP24_6_MAMA BIG PACK PLUS PORK 95G").
 - amount = copy the AMOUNT column value exactly as printed.
 - vat_7 = copy the VAT column value exactly as printed (may be 0.00 or a positive amount such as 21,000.00); do NOT calculate.
 - invoiceno = the reference code at the top-right of the document (e.g. "C260400473CN3").`,
