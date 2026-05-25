@@ -9,6 +9,10 @@ Update this file at the end of every working session.
 
 ### Completed
 
+#### Fix: phantom VAT 7% on invoices that have no VAT
+- **Bug**: `hasNonZeroVat()` fallback scans the 4 lines after "ภาษีมูลค่าเพิ่ม" and returns the first decimal it finds. On Lotus credit notes (and other vendors), the nearest decimal is often the AMOUNT or TOTAL column — not the VAT cell — so the function returned `true` even when VAT was 0.00. That triggered `vat_7 = amount × 0.07` on rows that should have had `vat_7 = 0`.
+- **Fix**: narrowed the VAT/WHT3 calculation block in `extract.ts` to `customerId === 'MAKRO'` only. Makro is the only vendor that prints grand-total-only VAT and needs per-line splitting; every other customer either prints per-line VAT (LLM extracts it) or has no VAT (must stay 0). Removed the now-unused `skipVatCalc` workaround for CFR (CFR isn't Makro so it wouldn't have triggered anyway) and the dead `hasWithholdingTax3()` function.
+
 #### LT — support 4 invoice formats + TH→9 vendor code conversion
 - `customers.ts`: rewrote LT `notes` as a 4-format guide. Each format has its own recognition cues and per-field mapping:
   - **Format A** — Credit Note Compensate Confirmation Report (Cxxx CN3/CV3)

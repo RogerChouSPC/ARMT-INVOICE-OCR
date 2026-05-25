@@ -184,20 +184,6 @@ function hasNonZeroVat(invoiceText: string): boolean {
 }
 
 /**
- * Returns true when the invoice page contains a non-zero withholding-tax 3% note
- * ("อัตราร้อยละ 3 จำนวน <amount>").  Used as a separate trigger from hasNonZeroVat
- * because some invoices have 0.00 VAT but still carry WHT 3% — in that case we
- * must still calculate tax_3 = amount × 0.03 per line (the LLM copies the grand
- * total into every row instead of calculating per-line).
- */
-function hasWithholdingTax3(invoiceText: string): boolean {
-  const m = invoiceText.match(/อัตราร้อยละ\s*3\s*จำนวน\s*([\d,]+\.\d{2})/)
-  if (!m) return false
-  const amount = parseFloat(m[1].replace(/,/g, ''))
-  return !isNaN(amount) && amount > 0
-}
-
-/**
  * Isolate the page of the combined OCR text that contains a given invoice number.
  * Pages are separated by "--- PAGE BREAK ---" (inserted by the frontend).
  * Falls back to the whole document if the invoice number is not found.
@@ -414,49 +400,41 @@ export default async function handler(req: Request, res: Response) {
       rows = rows.map((r) => ({ ...r, vendor_branch: '' }))
     }
 
-    // Some invoices (e.g. Makro) print only grand-total VAT/WHT, not per-line.
-    // Two independent triggers, checked per-invoice page (not whole document):
-    //   applyVat  → vat_7 = amount × 0.07  (non-zero ภาษีมูลค่าเพิ่ม on that page)
-    //   applyWht3 → tax_3 = amount × 0.03  (WHT 3% note on that page, OR Makro always)
-    // If either fires → netamount = (amount + vat_7) − tax_3
+    // Makro-only per-line VAT/WHT3 calculation.
     //
-    // For Makro (customerId === 'MAKRO') WHT3 is always present — we use it as a
-    // reliable fallback because Gemini OCR sometimes renders the Thai paragraph
-    // containing "อัตราร้อยละ 3 จำนวน" in a format the regex does not match.
-    const isMAKRO = customerId === 'MAKRO'
-    // Some customers (CFR) print VAT and WHT3 explicitly on the invoice.
-    // The LLM copies those figures directly — server-side calculation must be
-    // skipped or it overwrites the correct values (and zeroes out tax_3 because
-    // the CFR WHT3 label doesn't match our "อัตราร้อยละ 3 จำนวน" regex).
-    const skipVatCalc = customerId === 'CFR'
-    if (!skipVatCalc && (isMAKRO || hasNonZeroVat(text) || hasWithholdingTax3(text))) {
-      // Cache flags per invoice number to avoid re-scanning for every row.
-      type Flags = { applyVat: boolean; applyWht3: boolean }
-      const cache = new Map<string, Flags>()
-
+    // Makro prints only the GRAND TOTAL VAT and WHT3 — the LLM tends to copy
+    // those totals into every row, so we recompute them per-line:
+    //   vat_7     = amount × 0.07   (only when the page actually has VAT)
+    //   tax_3     = amount × 0.03   (Makro invoices always carry WHT3)
+    //   netamount = amount + vat_7 − tax_3
+    //
+    // We DO NOT run this block for other vendors.  Every other customer either:
+    //   (a) prints per-line VAT/WHT3 explicitly — LLM extracts them directly, or
+    //   (b) has no VAT — must stay zero.
+    // An earlier broader trigger fired for any invoice where `hasNonZeroVat`
+    // returned true, but that produced false positives on non-Makro vendors:
+    // the fallback in hasNonZeroVat picks up the AMOUNT or TOTAL column
+    // instead of the VAT cell, fabricating a 7% VAT on invoices that
+    // actually have VAT = 0.
+    if (customerId === 'MAKRO') {
+      const vatCache = new Map<string, boolean>()
       rows = rows.map((r) => {
         const invoiceNo = (r.invoiceno as string) || ''
-        if (!cache.has(invoiceNo)) {
-          const pageText = getInvoicePageSection(text, invoiceNo)
-          cache.set(invoiceNo, {
-            applyVat:  hasNonZeroVat(pageText),
-            // Makro always has WHT3; text detection covers other vendors.
-            applyWht3: isMAKRO || hasWithholdingTax3(pageText),
-          })
+        if (!vatCache.has(invoiceNo)) {
+          vatCache.set(invoiceNo, hasNonZeroVat(getInvoicePageSection(text, invoiceNo)))
         }
-        const { applyVat, applyWht3 } = cache.get(invoiceNo)!
-        if (!applyVat && !applyWht3) return r  // nothing to override on this page
+        const applyVat = vatCache.get(invoiceNo)!
 
         const amt = parseFloat((r.amount as string)?.replace(/,/g, '') ?? '')
         if (isNaN(amt)) return { ...r, vat_7: '0', tax_3: '0' }
 
-        const vat7 = applyVat  ? amt * 0.07 : 0
-        const tax3 = applyWht3 ? amt * 0.03 : 0
+        const vat7 = applyVat ? amt * 0.07 : 0
+        const tax3 = amt * 0.03
         const net  = amt + vat7 - tax3
         return {
           ...r,
-          vat_7:     applyVat  ? vat7.toFixed(2) : '0',
-          tax_3:     applyWht3 ? tax3.toFixed(2) : '0',
+          vat_7:     applyVat ? vat7.toFixed(2) : '0',
+          tax_3:     tax3.toFixed(2),
           netamount: net.toFixed(2),
         }
       })
