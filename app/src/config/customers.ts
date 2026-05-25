@@ -182,8 +182,8 @@ Recognise by: header text "CREDIT NOTE COMPENSATE CONFIRMATION REPORT"; invoice 
 - description = deal-type code line below VENDOR NO (e.g. "JN01 ส่วนลดในการร่วมกันสนับสนุนการขาย-โปรโมชัน") — same for all rows. Recognised codes: JN01/JN02/JV01/JV02/SN01/SN06/SN12/SV03/ON01.
 - product_description = detail reference line below each deal row (starts with 12-digit ref, then date range, then SKU info; e.g. "260300001811 26/02/2026-25/03/2026 90607_WK9-12 CP24_6_MAMA BIG PACK PLUS PORK 95G")
 
-FORMAT B — TAX INVOICE
-Recognise by: header "ใบแจ้งหนี้" + table columns "No | Item Category | Description | UOM | Quantity | Unit Price | Amount"; invoice number starts with "BH" (e.g. "BH2603-00013").
+FORMAT B — TAX INVOICE (and document-type variants)
+Recognise by: header "ใบแจ้งหนี้" + table columns "No | Item Category | Description | UOM | Quantity | Unit Price | Amount"; invoice number is a 2-3 letter prefix + 4 digits + "-" + 5 digits. Known prefixes: BH (e.g. "BH2603-00013"), DC (e.g. "DC2511-00051"), TS (e.g. "TS2601-00030"); other 2-3 letter prefixes may exist and should be accepted.
 - ONE ROW per Description-column line item.
 - vendor_customercode = "Customer Code" field value (e.g. "TH00607")
 - vendor_branch = "สาขาที่:" field value on the vendor side (e.g. "00175")
@@ -216,7 +216,7 @@ Recognise by: invoice number ending in "MDN" (e.g. "M260410670MDN"); body mentio
 - netamount = the grand total amount as printed (same as amount when VAT is 0; copy, do NOT calculate)
 - vat_7 = the value of the "ภาษีมูลค่าเพิ่ม VAT" CELL only (almost always "0"). The column header "จำนวนเงินรวม VAT 7%" is just the LABEL for the total-with-VAT column — it is NOT a VAT amount. Likewise "TAB 7%" / "TAB %" / "DISPLAY %" / "MD %" are discount-percentage columns, never VAT. If ภาษีมูลค่าเพิ่ม shows 0, vat_7 = "0".
 
-GLOBAL — for ALL Lotus formats: invoiceno MUST match one of these exact shapes — "Cxxxxxxxxx CN/CVx", "BHxxxx-xxxxx", "Axxxxxxxxx", or "Mxxxxxxxxx MDN". If you can't find a value matching one of these, leave the row out — do NOT fabricate an invoice number from random characters or column-header noise.`,
+GLOBAL — for ALL Lotus formats: invoiceno MUST match one of these shapes — "Cxxxxxxxxx CN/CVx" (Format A), "XX(X)xxxx-xxxxx" with a 2-3 letter prefix like BH/DC/TS (Format B), "Axxxxxxxxx" (Format C), or "Mxxxxxxxxx MDN" (Format D). If you can't find a value matching one of these, leave the row out — do NOT fabricate an invoice number from random characters or column-header noise.`,
   },
   {
     id: 'MAKRO',

@@ -266,10 +266,15 @@ function convertLTVendorCode(code: string): string {
 function findLTInvoiceCandidates(text: string): Set<string> {
   const found = new Set<string>()
   const patterns: RegExp[] = [
-    /\bC\d{6,14}(?:CN|CV)\d{0,3}\b/gi,  // Format A — Credit Note      e.g. C260400519CN3
-    /\bBH\d{3,8}-?\d{3,8}\b/gi,          // Format B — Tax Invoice      e.g. BH2603-00013
-    /\bA\d{8,12}\b/gi,                   // Format C — Receipt row      e.g. A260310890
-    /\bM\d{6,14}MDN\b/gi,                // Format D — Monthly Discount e.g. M260410670MDN
+    /\bC\d{6,14}(?:CN|CV)\d{0,3}\b/gi,    // Format A — Credit Note     e.g. C260400519CN3
+    /\b[A-Z]{2,3}\d{3,8}-?\d{3,8}\b/gi,   // Format B — Tax Invoice and variants
+                                          //           e.g. BH2603-00013 / DC2511-00051 / TS2601-00030
+                                          //           Any 2-3 letter prefix works — new document
+                                          //           types (FOO, BAR…) are picked up automatically
+                                          //           because the position-based whitelist still
+                                          //           requires the value to actually appear on the page.
+    /\bA\d{8,12}\b/gi,                    // Format C — Receipt row      e.g. A260310890
+    /\bM\d{6,14}MDN\b/gi,                 // Format D — Monthly Discount e.g. M260410670MDN
   ]
   for (const re of patterns) {
     const matches = text.match(re)

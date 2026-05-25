@@ -9,6 +9,10 @@ Update this file at the end of every working session.
 
 ### Completed
 
+#### LT — accept DC/TS (and any 2-3 letter) Tax Invoice prefixes
+- Broadened Format B candidate pattern from `BH\d{3,8}-?\d{3,8}` to `[A-Z]{2,3}\d{3,8}-?\d{3,8}`.  This accepts the newly-seen `DC2511-00051` and `TS2601-00030` shapes, plus any future 2-3 letter prefix Lotus introduces.  Safety still comes from the position-based whitelist — any extracted value must actually appear in the OCR text.
+- Updated Format B notes and the GLOBAL invoiceno rule to mention the new known prefixes.
+
 #### LT — switch to position-based invoice-number whitelist
 - Replaced the strict anchored regex with `findLTInvoiceCandidates()` that scans the OCR text with BROAD patterns and builds a set of every invoice-number candidate that actually appears in the source.  The filter now keeps any LLM extraction whose invoiceno is present in that set.
 - Why: a tight `^...$` regex would reject any future Lotus variation (different digit count, optional dash, etc.) even when the value is genuinely printed on the page.  Position-based validation accepts those because the whitelist comes from the printed text — yet still drops hallucinations like "P00030007P0N" because the LLM can't fabricate something that's also coincidentally in the OCR.
