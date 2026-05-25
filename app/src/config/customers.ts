@@ -177,7 +177,8 @@ Recognise by: header text "CREDIT NOTE COMPENSATE CONFIRMATION REPORT"; invoice 
 - vendor_customercode = number after "VENDOR NO" (e.g. "VENDOR NO 90607" → "90607")
 - invoiceno = top-right reference (e.g. "C260400473CN3")
 - amount = AMOUNT column value
-- vat_7 = VAT column value verbatim (may be 0.00)
+- vat_7 = VAT column value verbatim (may be 0.00) — copy, do NOT calculate.
+- netamount = AMOUNT column value (same as amount when VAT is 0; copy, do NOT calculate)
 - description = deal-type code line below VENDOR NO (e.g. "JN01 ส่วนลดในการร่วมกันสนับสนุนการขาย-โปรโมชัน") — same for all rows. Recognised codes: JN01/JN02/JV01/JV02/SN01/SN06/SN12/SV03/ON01.
 - product_description = detail reference line below each deal row (starts with 12-digit ref, then date range, then SKU info; e.g. "260300001811 26/02/2026-25/03/2026 90607_WK9-12 CP24_6_MAMA BIG PACK PLUS PORK 95G")
 
@@ -191,6 +192,8 @@ Recognise by: header "ใบแจ้งหนี้" + table columns "No | Item
 - duedate = "Due Date" value (e.g. "07-Apr-26")
 - description = "Description" column value verbatim PER ROW (e.g. "ค่าขนส่ง BackHaul เดือน มีนาคม 2569")
 - amount = "Amount" column value
+- vat_7 = "ภาษีมูลค่าเพิ่ม" summary line value verbatim (usually "0.00" for these invoices)
+- netamount = "ยอดรวมทั้งสิ้น" summary line value verbatim — COPY as printed, do NOT calculate from amount + VAT
 
 FORMAT C — RECEIPT
 Recognise by: header "ใบเสร็จรับเงิน" + table columns "ลำดับ | เลขที่ใบแจ้งหนี้ | วันที่ใบแจ้งหนี้ | รายการ | จำนวนเงินตามใบแจ้งหนี้ | จำนวนเงินรับ".
@@ -200,6 +203,7 @@ Recognise by: header "ใบเสร็จรับเงิน" + table column
 - invoicedate = "วันที่ใบแจ้งหนี้" column value PER ROW (e.g. "03-APR-26")
 - description = "รายการ" column value PER ROW verbatim (e.g. "CIS DCI Discount", "CIS Monthly Discount")
 - amount = "จำนวนเงินตามใบแจ้งหนี้" column value
+- netamount = "จำนวนเงินรับ" column value PER ROW — COPY as printed, do NOT calculate
 
 FORMAT D — MONTHLY DISCOUNT
 Recognise by: invoice number ending in "MDN" (e.g. "M260410670MDN"); body mentions "Monthly Discount"; has a "MONTHLY DISCOUNT CHARGE DETAIL" section.
@@ -209,6 +213,7 @@ Recognise by: invoice number ending in "MDN" (e.g. "M260410670MDN"); body mentio
 - invoicedate = top "วันที่ <Thai date>" (e.g. "3 พฤษภาคม 2569")
 - description = "Monthly Discount" (exactly these two words)
 - amount = the grand total amount of the invoice (e.g. "253,792.81")
+- netamount = the grand total amount as printed (same as amount when VAT is 0; copy, do NOT calculate)
 - vat_7 = the value of the "ภาษีมูลค่าเพิ่ม VAT" CELL only (almost always "0"). The column header "จำนวนเงินรวม VAT 7%" is just the LABEL for the total-with-VAT column — it is NOT a VAT amount. Likewise "TAB 7%" / "TAB %" / "DISPLAY %" / "MD %" are discount-percentage columns, never VAT. If ภาษีมูลค่าเพิ่ม shows 0, vat_7 = "0".
 
 GLOBAL — for ALL Lotus formats: invoiceno MUST match one of these exact shapes — "Cxxxxxxxxx CN/CVx", "BHxxxx-xxxxx", "Axxxxxxxxx", or "Mxxxxxxxxx MDN". If you can't find a value matching one of these, leave the row out — do NOT fabricate an invoice number from random characters or column-header noise.`,
