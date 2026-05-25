@@ -9,6 +9,15 @@ Update this file at the end of every working session.
 
 ### Completed
 
+#### LT — drop hallucinated invoice numbers + clarify Format D VAT trap
+- **Bug**: a 15-page Lotus PDF (mixed Credit Note / Tax Invoice / Monthly Discount) produced a fake row with invoiceno `P00030007P0N` and a fabricated `vat_7` value. That invoice number doesn't exist in the PDF — it was an LLM hallucination, likely seeded by Format-D column headers (`จำนวนเงินรวม VAT 7%`, `TAB 7%`) that the LLM mistook for VAT amounts.
+- **Fix #1** (`extract.ts`): added a strict regex filter in the LT post-processing block that drops any row whose `invoiceno` doesn't match one of the 4 known LT shapes:
+  - `C\d{9}(CN|CV)\d` (Credit Note)
+  - `BH\d{4}-\d{5}` (Tax Invoice)
+  - `A\d{9}` (Receipt line)
+  - `M\d{9}MDN` (Monthly Discount)
+- **Fix #2** (`customers.ts`): added explicit Format-D guidance that "VAT 7%" / "TAB 7%" / "DISPLAY %" / "MD %" are column-header LABELS for total/discount columns, NOT VAT amounts. Plus a global note that invoiceno MUST match one of the 4 patterns or the row should be omitted.
+
 #### Fix: phantom VAT 7% on invoices that have no VAT
 - **Bug**: `hasNonZeroVat()` fallback scans the 4 lines after "ภาษีมูลค่าเพิ่ม" and returns the first decimal it finds. On Lotus credit notes (and other vendors), the nearest decimal is often the AMOUNT or TOTAL column — not the VAT cell — so the function returned `true` even when VAT was 0.00. That triggered `vat_7 = amount × 0.07` on rows that should have had `vat_7 = 0`.
 - **Fix**: narrowed the VAT/WHT3 calculation block in `extract.ts` to `customerId === 'MAKRO'` only. Makro is the only vendor that prints grand-total-only VAT and needs per-line splitting; every other customer either prints per-line VAT (LLM extracts it) or has no VAT (must stay 0). Removed the now-unused `skipVatCalc` workaround for CFR (CFR isn't Makro so it wouldn't have triggered anyway) and the dead `hasWithholdingTax3()` function.

@@ -477,11 +477,27 @@ export default async function handler(req: Request, res: Response) {
       })
     }
 
-    // LT (Lotus) — two server-side overrides:
-    //   1. description: force the invoice-level deal-type line for Formats A/D
+    // LT (Lotus) — three server-side fixes:
+    //   1. Drop rows whose invoiceno doesn't match any of the 4 known formats.
+    //      The LLM occasionally hallucinates plausible-looking invoice numbers
+    //      (e.g. "P00030007P0N") from misread OCR text or column headers, and
+    //      attaches fabricated VAT/amount to them.  Strict pattern filter only
+    //      keeps rows we can map to a real Lotus document.
+    //   2. description: force invoice-level deal-type line for Formats A/D
     //      (skipped for Formats B/C where description is per-row in a table).
-    //   2. vendor_customercode: convert printed "TH0XXXX" → internal "9XXXX".
+    //   3. vendor_customercode: convert printed "TH0XXXX" → internal "9XXXX".
     if (customerId === 'LT') {
+      // Pattern legend:
+      //   C\d{9}(CN|CV)\d   — Credit Note   (e.g. C260400519CN3)
+      //   BH\d{4}-\d{5}     — Tax Invoice   (e.g. BH2603-00013)
+      //   A\d{9}            — Receipt line  (e.g. A260310890)
+      //   M\d{9}MDN         — Monthly Disc. (e.g. M260310670MDN)
+      const LT_INVOICE_RE = /^(?:C\d{9}(?:CN|CV)\d|BH\d{4}-\d{5}|A\d{9}|M\d{9}MDN)$/i
+      rows = rows.filter((r) => {
+        const inv = ((r.invoiceno as string) || '').trim()
+        return inv !== '' && LT_INVOICE_RE.test(inv)
+      })
+
       const ltDescCache = new Map<string, string | null>()
       rows = rows.map((r) => {
         const invoiceNo = (r.invoiceno as string) || ''

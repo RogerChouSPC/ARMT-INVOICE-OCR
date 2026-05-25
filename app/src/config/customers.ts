@@ -205,10 +205,13 @@ FORMAT D — MONTHLY DISCOUNT
 Recognise by: invoice number ending in "MDN" (e.g. "M260410670MDN"); body mentions "Monthly Discount"; has a "MONTHLY DISCOUNT CHARGE DETAIL" section.
 - ONE ROW per invoice — just the grand total. Do NOT expand the MONTHLY DISCOUNT CHARGE DETAIL table or "Monthly Discount - Net Receipt Details" table.
 - vendor_customercode = number after "VENDOR NO" or "Vendor No" (e.g. "VENDOR NO :10670" → "10670")
-- invoiceno = top-right invoice code (e.g. "M260410670MDN")
+- invoiceno = top-right invoice code (e.g. "M260410670MDN") — must match pattern "M" + 9 digits + "MDN". Do NOT invent invoice numbers from any other text.
 - invoicedate = top "วันที่ <Thai date>" (e.g. "3 พฤษภาคม 2569")
 - description = "Monthly Discount" (exactly these two words)
-- amount = the grand total amount of the invoice (e.g. "253,792.81")`,
+- amount = the grand total amount of the invoice (e.g. "253,792.81")
+- vat_7 = the value of the "ภาษีมูลค่าเพิ่ม VAT" CELL only (almost always "0"). The column header "จำนวนเงินรวม VAT 7%" is just the LABEL for the total-with-VAT column — it is NOT a VAT amount. Likewise "TAB 7%" / "TAB %" / "DISPLAY %" / "MD %" are discount-percentage columns, never VAT. If ภาษีมูลค่าเพิ่ม shows 0, vat_7 = "0".
+
+GLOBAL — for ALL Lotus formats: invoiceno MUST match one of these exact shapes — "Cxxxxxxxxx CN/CVx", "BHxxxx-xxxxx", "Axxxxxxxxx", or "Mxxxxxxxxx MDN". If you can't find a value matching one of these, leave the row out — do NOT fabricate an invoice number from random characters or column-header noise.`,
   },
   {
     id: 'MAKRO',
