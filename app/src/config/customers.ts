@@ -141,12 +141,18 @@ remark = the text from the "หมายเหตุ" line: if "Netting" appears
   },
   {
     id: 'THEMALL',
-    label: 'The Mall',
-    match: { filenameKeywords: ['themall'], nameKeywords: ['the mall', 'เดอะมอลล์'] },
+    label: 'The Mall / City Mall Group',
+    match: {
+      filenameKeywords: ['themall', 'em district', 'emdistrict', 'emporium', 'emquartier', 'emsphere', 'city mall', 'citymall'],
+      nameKeywords: ['the mall', 'เดอะมอลล์', 'city mall', 'ซิตี้มอลล์', 'em district', 'emporium', 'emquartier', 'emsphere'],
+      taxids: ['0105523009350', '0105540016253'],
+    },
     extractMode: 'ocr',
     vendorCode: 'customer-line',
     vendorBranch: 'auto',
-    notes: 'product_description must include BOTH the Thai and English text as printed, e.g. "ส่วนลด Discount" — never drop the Thai part. vendor_customercode = the code at the start of the ชื่อลูกค้า line (e.g. "SHP00" / "SHP20").',
+    notes: `description = the FULL text in the รายการ / Description column verbatim, including every line of the cell (e.g. "ส่วนลดรับรายการ_M Price 04/2026_(02.04.2026_29.04.2026) C37 - Dairy-OR Period 02.04.2026 - 29.04.2026").
+product_description = always "" (blank). Server enforces this.
+vendor_customercode = the code at the start of the ชื่อลูกค้า / Customer Name line (e.g. "SHP00" / "SHP20").`,
   },
   {
     id: 'HOMEPRO',

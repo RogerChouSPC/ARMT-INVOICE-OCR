@@ -544,6 +544,13 @@ export default async function handler(req: Request, res: Response) {
       })
     }
 
+    // THEMALL (incl. City Mall Group / EM District / Emporium / EmQuartier /
+    // Emsphere): product_description is always blank — the only descriptive
+    // text lives in the รายการ / Description column which maps to `description`.
+    if (customerId === 'THEMALL') {
+      rows = rows.map((r) => ({ ...r, product_description: '' }))
+    }
+
     // CFR: truncate remark at the first boundary word found:
     //   1. "Netting"        — netting/payment info starts here
     //   2. "สำหรับร้านค้า" — store instructions start here (fallback if no Netting)
