@@ -473,20 +473,18 @@ export default async function handler(req: Request, res: Response) {
       })
     }
 
-    // Makro: hard-code description and product_description.
+    // Makro: combine BOTH lines of the รายละเอียด cell into description,
+    // and leave product_description blank.
+    //   description         = "<line 1 heading> <line 2 detail>"
+    //   product_description = ""
     //
-    // The LLM consistently:
-    //   - puts the category heading (e.g. "Retro Bonus") in product_description ← correct value, wrong field
-    //   - puts the receipt header "ได้รับชำระเงินตามรายการดังนี้" in description ← useless
-    //
-    // The OCR text structure has Gemini merge or skip the heading-only lines,
-    // so "line above the amount" is NOT the category heading — it's things like
-    // "N", "Amount", or the previous row's amount.  But the text ON the amount
-    // line (before the number) IS the correct detail text.
-    //
-    // Strategy:
-    //   description         ← LLM's product_description  (category heading — LLM gets this right)
-    //   product_description ← OCR text before the amount  (detail line — OCR extraction gets this right)
+    // findMakroItemLines() returns:
+    //   .description         — line ABOVE the amount (short category heading,
+    //                          e.g. "Retro Bonus")
+    //   .product_description — text BEFORE the amount on the same line
+    //                          (specific detail, e.g. "Retro Bonus 2026")
+    // We join them with a single space.  If OCR matching fails we fall back to
+    // whatever the LLM put in description.
     if (customerId === 'MAKRO') {
       const pageTextCache = new Map<string, string>()
       const usedByPage    = new Map<string, Set<number>>()
@@ -500,13 +498,11 @@ export default async function handler(req: Request, res: Response) {
         const used     = usedByPage.get(invoiceNo)!
         const found    = findMakroItemLines(pageText, (r.amount as string) || '', used)
 
-        // description: trust the LLM — with correct customer instructions it now correctly
-        //   extracts the category heading (e.g. "Retro Bonus") into description.
-        // product_description: override from OCR text (verbatim text printed before the
-        //   amount on that line, e.g. "Retro Bonus 2026").
-        const newProductDesc = found?.product_description || (r.product_description as string)
+        const combinedDesc = found
+          ? [found.description, found.product_description].filter(Boolean).join(' ').trim()
+          : (r.description as string) || ''
 
-        return { ...r, product_description: newProductDesc }
+        return { ...r, description: combinedDesc, product_description: '' }
       })
     }
 

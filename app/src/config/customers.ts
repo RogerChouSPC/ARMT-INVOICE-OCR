@@ -243,12 +243,13 @@ GLOBAL — for ALL Lotus formats: invoiceno MUST match one of these shapes — "
     vendorBranch: 'auto',
     notes: `vendor_customercode = the number in (parentheses) after our company name on the "ได้รับเงินจาก" line (e.g. 2128209).
 TWO-LINE ITEM LAYOUT — each line item in the รายละเอียด/Description column is printed as EXACTLY two lines:
-  Line 1 — the short category/charge-type heading, printed WITHOUT an amount on the right side → this is "description".
+  Line 1 — short category/charge-type heading (no amount on its line)
     Examples: "Promotion/Markdown Deal", "Retro Bonus", "Store Celebration", "Data Providing Deal/MSP", "ค่ากระจายสินค้า"
-  Line 2 — the specific detail text printed ON THE SAME LINE as the baht amount on the right → this is "product_description".
+  Line 2 — specific detail text on the same line as the baht amount
     Examples: "DF2026036574 Promotion Support based on Sale", "Retro Bonus 2026", "Store Celebration 2026", "Data Providing Deal/MSP 2026", "Backhaul Wangnoi", "ค่ากระจายสินค้า 2026"
-CRITICAL — "ได้รับชำระเงินตามรายการดังนี้" is a receipt header printed above the table. It is NEVER a description — do NOT put it in description for any row.
-RULE: description = the line WITHOUT an amount (the heading); product_description = the line WITH the amount (the detail). Never swap them.
+description = BOTH lines combined into a single string (server enforces; just give your best reading of both lines).
+product_description = always "" (blank). Server enforces.
+CRITICAL — "ได้รับชำระเงินตามรายการดังนี้" is a receipt header printed above the table. NEVER include it in description.
 vat_7: calculate as amount × 0.07 for each line item (Makro prints only the total VAT, not per-line — this overrides the general no-calculate rule).`,
   },
   {
