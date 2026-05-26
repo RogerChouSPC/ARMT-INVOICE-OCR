@@ -433,12 +433,31 @@ export default async function handler(req: Request, res: Response) {
     // This works whether the LLM follows the new note (puts both in description,
     // leaves product_description empty) or the old split (line 1 in description,
     // line 2 in product_description).
+    //
+    // Also append a 1-based sequence suffix to invoiceno when one invoice has
+    // multiple line items: "26512592" with 2 rows → "26512592-1", "26512592-2".
+    // Single-item invoices are left unchanged.  Accounting needs each line to
+    // have a unique invoice reference.
     if (customerId === 'MAKRO') {
       rows = rows.map((r) => {
         const desc  = ((r.description as string)         || '').trim()
         const pdesc = ((r.product_description as string) || '').trim()
         const combined = [desc, pdesc].filter(Boolean).join(' ').trim()
         return { ...r, description: combined, product_description: '' }
+      })
+
+      const counts = new Map<string, number>()
+      for (const r of rows) {
+        const inv = (r.invoiceno as string) || ''
+        if (inv) counts.set(inv, (counts.get(inv) || 0) + 1)
+      }
+      const seen = new Map<string, number>()
+      rows = rows.map((r) => {
+        const inv = (r.invoiceno as string) || ''
+        if (!inv || (counts.get(inv) || 0) <= 1) return r
+        const n = (seen.get(inv) || 0) + 1
+        seen.set(inv, n)
+        return { ...r, invoiceno: `${inv}-${n}` }
       })
     }
 
