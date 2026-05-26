@@ -299,7 +299,15 @@ vat_7: calculate as amount × 0.07 for each line item (Makro prints only the tot
     extractMode: 'auto',
     vendorCode: 'customer-line',
     vendorBranch: 'auto',
-    notes: 'vendor_customercode = the number at the start of the ชื่อลูกค้า line (e.g. 6600179). The numeric code printed right after the VENDOR company name at the top (e.g. "00000") is the vendor_branch, NOT the vendor_customercode — keep the two separate.',
+    notes: `vendor_customercode = the number at the start of the ชื่อลูกค้า line (e.g. 6600179). The numeric code printed right after the VENDOR company name at the top (e.g. "00000") is the vendor_branch, NOT the vendor_customercode — keep the two separate.
+The รายการ column cell uses the same format as the parent Big C invoices:
+  "<description> : <5-digit code> <English group>"
+  e.g. "ส่วนลดพิเศษ Anniversary P1D04-PANI006012-HO : 21630 Salted Grocery -DF"
+Server splits the cell automatically — you can put the whole cell in description and leave the other fields blank; the server populates:
+  description         = text BEFORE the colon
+  vendor_expensecode  = the 5-digit code AFTER the colon
+  vendor_expensegroup = the English group name after the code
+  product_description = always "" (server enforces)`,
   },
   {
     id: 'BIGC',

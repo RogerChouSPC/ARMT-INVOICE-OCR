@@ -554,7 +554,7 @@ export default async function handler(req: Request, res: Response) {
     // The LLM tends to dump the whole cell into product_description, so we
     // merge description + product_description first, then parse.  No match →
     // leave description alone and just blank product_description.
-    if (customerId === 'BIGC') {
+    if (customerId === 'BIGC' || customerId === 'BIGC_FOOD') {
       const BIGC_ROW_RE = /^(.+?)\s*:\s*(\d{5})\s+(.+)$/
       rows = rows.map((r) => {
         const desc  = ((r.description as string)         || '').trim()
