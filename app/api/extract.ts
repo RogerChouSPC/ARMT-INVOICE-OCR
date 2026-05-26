@@ -283,58 +283,6 @@ function findLTInvoiceCandidates(text: string): Set<string> {
   return found
 }
 
-/**
- * For Makro invoices: locate a line item in the OCR page text by its printed
- * amount and extract the two-line description layout:
- *   - The line ON THE SAME LINE as the amount → product_description (detail)
- *   - The line IMMEDIATELY ABOVE the amount  → description (category heading)
- *
- * Makro prints each item as:
- *   "Data Providing Deal/MSP"              ← description (no amount)
- *   "Data Providing Deal/MSP 2026  7,326.53"  ← product_description + amount
- *
- * usedPositions prevents the same text position being matched twice when
- * multiple line items share the same amount value.
- */
-function findMakroItemLines(
-  pageText: string,
-  amountRaw: string,
-  usedPositions: Set<number>,
-): { description: string; product_description: string } | null {
-  const amtNum = parseFloat((amountRaw || '').replace(/,/g, ''))
-  if (isNaN(amtNum) || amtNum <= 0) return null
-  // Makro prints amounts with thousands separators: 7,326.53 / 115,600.00
-  const formatted = amtNum.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-
-  let from = 0
-  while (from < pageText.length) {
-    const idx = pageText.indexOf(formatted, from)
-    if (idx < 0) break
-    if (!usedPositions.has(idx)) {
-      usedPositions.add(idx)
-
-      // Line that contains the amount
-      const lineStart = pageText.lastIndexOf('\n', idx - 1) + 1
-      const lineEnd   = pageText.indexOf('\n', idx)
-      const line      = pageText.slice(lineStart, lineEnd > 0 ? lineEnd : pageText.length)
-
-      // product_description = everything before the amount on that line
-      const product_description = line.slice(0, line.indexOf(formatted)).trim()
-
-      // description = the line immediately above
-      const prevEnd   = lineStart > 0 ? lineStart - 1 : 0
-      const prevStart = pageText.lastIndexOf('\n', prevEnd - 1) + 1
-      const description = pageText.slice(prevStart, prevEnd).trim()
-
-      if (description || product_description) {
-        return { description, product_description }
-      }
-    }
-    from = idx + 1
-  }
-  return null
-}
-
 /** Convert YYYY-MM-DD → DD/MM/YYYY. Passes through anything that doesn't match. */
 function isoToDmy(date: string): string {
   if (!date) return date
@@ -473,36 +421,24 @@ export default async function handler(req: Request, res: Response) {
       })
     }
 
-    // Makro: combine BOTH lines of the รายละเอียด cell into description,
-    // and leave product_description blank.
-    //   description         = "<line 1 heading> <line 2 detail>"
-    //   product_description = ""
-    //
-    // findMakroItemLines() returns:
-    //   .description         — line ABOVE the amount (short category heading,
-    //                          e.g. "Retro Bonus")
-    //   .product_description — text BEFORE the amount on the same line
-    //                          (specific detail, e.g. "Retro Bonus 2026")
-    // We join them with a single space.  If OCR matching fails we fall back to
-    // whatever the LLM put in description.
+    // Makro: combine both lines of the รายละเอียด cell into description, and
+    // blank product_description.  The previous position-based approach (read
+    // the line above the amount from OCR) was unreliable because Gemini Vision
+    // does not always preserve the two-line row structure as separate text
+    // lines.  Trust the LLM — which sees the page text and is instructed by
+    // the notes to read both lines — and just merge whatever it puts in the
+    // two fields:
+    //   description         = LLM.description + ' ' + LLM.product_description
+    //   product_description = ''
+    // This works whether the LLM follows the new note (puts both in description,
+    // leaves product_description empty) or the old split (line 1 in description,
+    // line 2 in product_description).
     if (customerId === 'MAKRO') {
-      const pageTextCache = new Map<string, string>()
-      const usedByPage    = new Map<string, Set<number>>()
       rows = rows.map((r) => {
-        const invoiceNo = (r.invoiceno as string) || ''
-        if (!pageTextCache.has(invoiceNo)) {
-          pageTextCache.set(invoiceNo, getInvoicePageSection(text, invoiceNo))
-          usedByPage.set(invoiceNo, new Set())
-        }
-        const pageText = pageTextCache.get(invoiceNo)!
-        const used     = usedByPage.get(invoiceNo)!
-        const found    = findMakroItemLines(pageText, (r.amount as string) || '', used)
-
-        const combinedDesc = found
-          ? [found.description, found.product_description].filter(Boolean).join(' ').trim()
-          : (r.description as string) || ''
-
-        return { ...r, description: combinedDesc, product_description: '' }
+        const desc  = ((r.description as string)         || '').trim()
+        const pdesc = ((r.product_description as string) || '').trim()
+        const combined = [desc, pdesc].filter(Boolean).join(' ').trim()
+        return { ...r, description: combined, product_description: '' }
       })
     }
 
