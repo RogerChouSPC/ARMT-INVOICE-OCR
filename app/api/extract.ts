@@ -544,6 +544,34 @@ export default async function handler(req: Request, res: Response) {
       })
     }
 
+    // Big C: split the รายการ cell into 4 fields.
+    //   Format:  "<Thai/English description> : <5-digit code> <English group>"
+    //   Example: "ส่วนลดพิเศษ Anniversary P1D04-PANI006012-HO : 21630 Salted Grocery -DF"
+    //   →  description         = "ส่วนลดพิเศษ Anniversary P1D04-PANI006012-HO"
+    //      vendor_expensecode  = "21630"
+    //      vendor_expensegroup = "Salted Grocery -DF"
+    //      product_description = ""
+    // The LLM tends to dump the whole cell into product_description, so we
+    // merge description + product_description first, then parse.  No match →
+    // leave description alone and just blank product_description.
+    if (customerId === 'BIGC') {
+      const BIGC_ROW_RE = /^(.+?)\s*:\s*(\d{5})\s+(.+)$/
+      rows = rows.map((r) => {
+        const desc  = ((r.description as string)         || '').trim()
+        const pdesc = ((r.product_description as string) || '').trim()
+        const full  = [desc, pdesc].filter(Boolean).join(' ').trim()
+        const m = full.match(BIGC_ROW_RE)
+        if (!m) return { ...r, product_description: '' }
+        return {
+          ...r,
+          description:         m[1].trim(),
+          vendor_expensecode:  m[2],
+          vendor_expensegroup: m[3].trim(),
+          product_description: '',
+        }
+      })
+    }
+
     // CP Axtra address disambiguation: Lotus (customergroup 05) and Makro (customergroup 04)
     // share the same taxid (0107567000414).  The only reliable discriminator is the vendor's
     // printed address.  Per-invoice page, search for the distinctive street name and override
