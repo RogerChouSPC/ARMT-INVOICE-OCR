@@ -545,10 +545,39 @@ export default async function handler(req: Request, res: Response) {
     }
 
     // THEMALL (incl. City Mall Group / EM District / Emporium / EmQuartier /
-    // Emsphere): product_description is always blank — the only descriptive
-    // text lives in the รายการ / Description column which maps to `description`.
+    // Emsphere):
+    //   1. product_description is always blank — the only descriptive text
+    //      lives in the รายการ / Description column which maps to `description`.
+    //   2. Withholding tax is computed per-invoice from amount:
+    //        - tax_2 = amount × 0.02  when the invoice text contains
+    //          "ค่าสื่อ" / "ค่าโฆษณา" / "โฆษณา" / "Advertising" (media/ad fees)
+    //        - tax_3 = amount × 0.03  otherwise (general service fees)
+    //   3. netamount = amount + vat_7 − tax_2 − tax_3
     if (customerId === 'THEMALL') {
-      rows = rows.map((r) => ({ ...r, product_description: '' }))
+      const AD_KEYWORDS = /ค่าสื่อ|ค่าโฆษณา|โฆษณา|advertising/i
+      const adCache = new Map<string, boolean>()
+      rows = rows.map((r) => {
+        const invoiceNo = (r.invoiceno as string) || ''
+        if (!adCache.has(invoiceNo)) {
+          adCache.set(invoiceNo, AD_KEYWORDS.test(getInvoicePageSection(text, invoiceNo)))
+        }
+        const isAd = adCache.get(invoiceNo)!
+
+        const amt = parseFloat((r.amount as string)?.replace(/,/g, '') ?? '')
+        if (isNaN(amt)) return { ...r, product_description: '' }
+
+        const vat  = parseFloat((r.vat_7 as string)?.replace(/,/g, '') ?? '') || 0
+        const tax2 = isAd  ? amt * 0.02 : 0
+        const tax3 = !isAd ? amt * 0.03 : 0
+        const net  = amt + vat - tax2 - tax3
+        return {
+          ...r,
+          product_description: '',
+          tax_2:     tax2.toFixed(2),
+          tax_3:     tax3.toFixed(2),
+          netamount: net.toFixed(2),
+        }
+      })
     }
 
     // CFR: truncate remark at the first boundary word found:

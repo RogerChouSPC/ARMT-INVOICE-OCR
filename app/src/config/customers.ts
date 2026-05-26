@@ -152,7 +152,12 @@ remark = the text from the "หมายเหตุ" line: if "Netting" appears
     vendorBranch: 'auto',
     notes: `description = the FULL text in the รายการ / Description column verbatim, including every line of the cell (e.g. "ส่วนลดรับรายการ_M Price 04/2026_(02.04.2026_29.04.2026) C37 - Dairy-OR Period 02.04.2026 - 29.04.2026").
 product_description = always "" (blank). Server enforces this.
-vendor_customercode = the code at the start of the ชื่อลูกค้า / Customer Name line (e.g. "SHP00" / "SHP20").`,
+vendor_customercode = the code at the start of the ชื่อลูกค้า / Customer Name line (e.g. "SHP00" / "SHP20").
+vat_7 = copy the "ภาษีมูลค่าเพิ่ม" / "VAT" value verbatim (commonly "0.00").
+Server calculates tax_2 / tax_3 / netamount — no need to extract them:
+  - tax_2 = amount × 0.02 when the invoice contains "ค่าสื่อ" / "ค่าโฆษณา" / "โฆษณา" / "Advertising" (media/ad service)
+  - tax_3 = amount × 0.03 otherwise
+  - netamount = amount + vat_7 − tax_2 − tax_3`,
   },
   {
     id: 'HOMEPRO',
