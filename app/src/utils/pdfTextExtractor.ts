@@ -47,13 +47,17 @@ export async function extractPdfText(file: File): Promise<PdfTextResult> {
   //       code points — a genuine Thai invoice has zero Cyrillic, so any
   //       meaningful amount of Cyrillic flags the document.
   //   (b) CP All PDFs use fonts with no Unicode mapping for Thai at all — the
-  //       Thai text comes out as random ASCII / control characters with zero
-  //       Thai code points. All supported customers are Thai retail chains, so
-  //       a document with substantial text content but virtually no Thai must
-  //       be a font-encoding issue rather than an English-only invoice.
+  //       Thai text comes out as random ASCII / control characters with very
+  //       few Thai code points.  All supported customers are Thai retail
+  //       chains, so a document with substantial text content where less than
+  //       ~5% of characters are Thai must be a font-encoding issue.
+  // Use explicit \u escapes so the regex is unambiguous regardless of how
+  // the source file is encoded.
   const cyrillicCount = (text.match(/[Ѐ-ӿ]/g) || []).length
   const thaiCount     = (text.match(/[฀-๿]/g) || []).length
-  const isGarbled = cyrillicCount > 20 || (totalChars > 200 && thaiCount < 20)
+  const thaiRatio     = totalChars > 0 ? thaiCount / totalChars : 0
+  const isGarbled = cyrillicCount > 20 || (totalChars > 200 && thaiRatio < 0.05)
+  console.info(`[pdfTextExtractor] totalChars=${totalChars} thaiCount=${thaiCount} thaiRatio=${thaiRatio.toFixed(3)} cyrillicCount=${cyrillicCount} isGarbled=${isGarbled}`)
 
   // Require a majority of pages to have real text — a high average caused by one digital
   // summary page among several scanned pages (e.g. CP ALL) would otherwise skip OCR.
