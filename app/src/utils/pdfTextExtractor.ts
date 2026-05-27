@@ -41,13 +41,19 @@ export async function extractPdfText(file: File): Promise<PdfTextResult> {
   const avgCharsPerPage = totalChars / pdf.numPages
   const pagesWithText = pageParts.filter(p => p.replace(/\s+/g, '').length > 100).length
 
-  // Detect garbled text: some invoice PDFs (CFM, CFR, CMK) embed fonts with a
-  // broken encoding that maps Thai glyphs onto Cyrillic code points. A genuine
-  // Thai invoice contains zero Cyrillic — any meaningful amount means the text
-  // layer is unusable, so fall back to the image-OCR path which reads the page
-  // visually and produces clean Thai.
+  // Detect two broken-encoding patterns where the text layer is unusable and
+  // we must fall back to the image-OCR path:
+  //   (a) CFM / CFR / CMK PDFs embed fonts that map Thai glyphs onto Cyrillic
+  //       code points — a genuine Thai invoice has zero Cyrillic, so any
+  //       meaningful amount of Cyrillic flags the document.
+  //   (b) CP All PDFs use fonts with no Unicode mapping for Thai at all — the
+  //       Thai text comes out as random ASCII / control characters with zero
+  //       Thai code points. All supported customers are Thai retail chains, so
+  //       a document with substantial text content but virtually no Thai must
+  //       be a font-encoding issue rather than an English-only invoice.
   const cyrillicCount = (text.match(/[Ѐ-ӿ]/g) || []).length
-  const isGarbled = cyrillicCount > 20
+  const thaiCount     = (text.match(/[฀-๿]/g) || []).length
+  const isGarbled = cyrillicCount > 20 || (totalChars > 200 && thaiCount < 20)
 
   // Require a majority of pages to have real text — a high average caused by one digital
   // summary page among several scanned pages (e.g. CP ALL) would otherwise skip OCR.
