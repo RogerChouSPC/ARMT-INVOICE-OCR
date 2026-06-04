@@ -97,7 +97,6 @@ export async function runPdf(pdfPath: string, apiKey: string): Promise<PipelineR
 
     base.rows = postProcessRows(rawRows, {
       text,
-      filename,
       vendorCode: effRule?.vendorCode ?? 'auto',
       vendorBranch: effRule?.vendorBranch ?? 'auto',
       customerId: (effRule?.id ?? '').toUpperCase(),

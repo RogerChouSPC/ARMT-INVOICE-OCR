@@ -366,27 +366,10 @@ export async function callExtractModel(
 
 export interface PostProcessOpts {
   text: string
-  /** Upload filename — used to derive divisionsale (the division token lives there). */
-  filename: string
   vendorCode: string
   vendorBranch: string
   customerId: string
   customerMasterJson: string
-}
-
-/**
- * divisionsale is the sales-division code (DC / A / H / N / P) that staff encode
- * in the upload filename, e.g. "…ซีเจ A รอบโอน…", "…(N).pdf", "…69 DC.pdf".
- * The LLM cannot reliably see the filename, so we derive it deterministically.
- * Returns "" when the filename carries no division token. "DC" wins over a single
- * letter; the token must be standalone (bounded by non-Latin-letter chars), so it
- * never fires on letters inside words like MAKRO / LOTUS / S006.
- */
-export function extractDivisionFromFilename(filename: string): string {
-  const base = filename.replace(/\.[^./\\]+$/, '')
-  if (/(?:^|[^A-Za-z])DC(?=$|[^A-Za-z])/i.test(base)) return 'DC'
-  const m = base.match(/(?:^|[^A-Za-z])([AHNP])(?=$|[^A-Za-z])/i)
-  return m ? m[1].toUpperCase() : ''
 }
 
 /**
@@ -408,7 +391,6 @@ export async function extractRowsCore(input: ExtractCoreInput): Promise<ExtractC
 
   const rows = postProcessRows(rawRows, {
     text: input.text,
-    filename: input.filename,
     vendorCode: input.vendorCode,
     vendorBranch: input.vendorBranch,
     customerId: input.customerId,
@@ -665,11 +647,6 @@ export function postProcessRows(rawRows: Record<string, unknown>[], opts: PostPr
         })
       }
     }
-
-    // divisionsale: derive from the upload filename (see extractDivisionFromFilename).
-    // Only override when a token is found, so vendors whose filename omits it keep "".
-    const division = extractDivisionFromFilename(opts.filename)
-    if (division) rows = rows.map((r) => ({ ...r, divisionsale: division }))
 
     // Convert dates from YYYY-MM-DD → DD/MM/YYYY for all customers.
     rows = rows.map((r) => ({
