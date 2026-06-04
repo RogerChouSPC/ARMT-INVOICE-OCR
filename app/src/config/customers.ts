@@ -150,7 +150,12 @@ remark = the text from the "หมายเหตุ" line: if "Netting" appears
     extractMode: 'ocr',
     vendorCode: 'customer-line',
     vendorBranch: 'auto',
-    notes: `description = the FULL text in the รายการ / Description column verbatim, including every line of the cell (e.g. "ส่วนลดรับรายการ_M Price 04/2026_(02.04.2026_29.04.2026) C37 - Dairy-OR Period 02.04.2026 - 29.04.2026").
+    notes: `description = the COMPLETE รายการ / Description column cell, verbatim. This cell ALMOST ALWAYS spans MULTIPLE lines — you MUST read the whole cell top-to-bottom and join EVERY line into ONE string separated by single spaces. Never stop at the first line.
+  The lines you must include, in order, are typically:
+    1. the main heading line (e.g. "เพิ่ม GP. ผลิตภัณฑ์ สหพัฒนพิบูลย์ #12", "ส่วนลดรับรายการ_M Price 04/2026_(...) C37 - Dairy-OR", "ค่าสื่อโฆษณา END CAP TV (Feb 2026) C27")
+    2. any middle line(s): a "สินค้า ..." product line, a "ระยะเวลา ..." line, a "Bonus Buy # ..." line, etc.
+    3. the FINAL "Period DD.MM.YYYY - DD.MM.YYYY" line — this trailing Period line is part of the description and is the one most often dropped; ALWAYS append it.
+  Example (two-line cell) → description = "เพิ่ม GP. ผลิตภัณฑ์ สหพัฒนพิบูลย์ #12 Period 30.04.2026 - 30.04.2026".
 product_description = always "" (blank). Server enforces this.
 vendor_customercode = the code at the start of the ชื่อลูกค้า / Customer Name line (e.g. "SHP00" / "SHP20").
 vat_7 = copy the "ภาษีมูลค่าเพิ่ม" / "VAT" value verbatim (commonly "0.00").

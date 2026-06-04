@@ -22,3 +22,12 @@ ARMT-INVOICE-OCR/data/customer_master.db
 # Build artifacts in sub-projects
 app/node_modules/
 app/dist/
+
+# Eval datasets (large, real invoice data — kept local, not committed)
+INVOICE JAN-APR/
+OUTPUT JAN-APR/
+
+# Eval harness machine-specific / generated artifacts
+app/scripts/eval/vendor-map.json
+app/scripts/eval/.cache/
+app/scripts/eval/reports/

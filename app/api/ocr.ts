@@ -15,29 +15,16 @@ async function verifyAzureToken(authHeader: string | undefined): Promise<boolean
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 const MODEL = 'google/gemini-2.5-flash'
 
-export default async function handler(req: Request, res: Response) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method Not Allowed' })
-  }
+export type OcrCoreResult =
+  | { ok: true; text: string }
+  | { ok: false; status: number; error: string }
 
-  if (!await verifyAzureToken(req.headers.authorization)) {
-    return res.status(401).json({ error: 'Unauthorized' })
-  }
-
-  const apiKey = process.env.OPENROUTER_API_KEY
-  if (!apiKey) {
-    return res.status(500).json({ error: 'OPENROUTER_API_KEY not configured' })
-  }
-
-  let image: string
-  try {
-    const body = req.body || {}
-    image = body.image
-    if (!image) throw new Error('missing image')
-  } catch {
-    return res.status(400).json({ error: 'Expected { image: base64string }' })
-  }
-
+/**
+ * Pure OCR core: base64 PNG → Gemini Vision → raw text.  No auth/env/Express
+ * dependency so it can be reused by the eval harness (scripts/eval).  Behavior
+ * is identical to the original handler.
+ */
+export async function ocrImageCore(image: string, apiKey: string): Promise<OcrCoreResult> {
   try {
     const apiRes = await fetch(OPENROUTER_URL, {
       method: 'POST',
@@ -67,16 +54,46 @@ export default async function handler(req: Request, res: Response) {
     if (!apiRes.ok) {
       const errText = await apiRes.text()
       if (apiRes.status === 429) {
-        return res.status(429).json({ error: 'API quota exceeded. Please try again shortly.' })
+        return { ok: false, status: 429, error: 'API quota exceeded. Please try again shortly.' }
       }
-      return res.status(502).json({ error: `OpenRouter ${apiRes.status}: ${errText.slice(0, 300)}` })
+      return { ok: false, status: 502, error: `OpenRouter ${apiRes.status}: ${errText.slice(0, 300)}` }
     }
 
     const data = await apiRes.json()
     const text: string = data?.choices?.[0]?.message?.content ?? ''
-    return res.status(200).json({ text, source: 'openrouter' })
+    return { ok: true, text }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    return res.status(502).json({ error: message })
+    return { ok: false, status: 502, error: message }
   }
+}
+
+export default async function handler(req: Request, res: Response) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method Not Allowed' })
+  }
+
+  if (!await verifyAzureToken(req.headers.authorization)) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+
+  const apiKey = process.env.OPENROUTER_API_KEY
+  if (!apiKey) {
+    return res.status(500).json({ error: 'OPENROUTER_API_KEY not configured' })
+  }
+
+  let image: string
+  try {
+    const body = req.body || {}
+    image = body.image
+    if (!image) throw new Error('missing image')
+  } catch {
+    return res.status(400).json({ error: 'Expected { image: base64string }' })
+  }
+
+  const result = await ocrImageCore(image, apiKey)
+  if (!result.ok) {
+    return res.status(result.status).json({ error: result.error })
+  }
+  return res.status(200).json({ text: result.text, source: 'openrouter' })
 }

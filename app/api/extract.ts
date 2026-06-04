@@ -5,7 +5,7 @@ import type { Request, Response } from 'express'
 // frontend detects the customer and sends the resulting instructions + directives
 // in the request body.
 
-const DEFAULT_CUSTOMER_SECTION = `DETECTED CUSTOMER: unknown — use general rules.
+export const DEFAULT_CUSTOMER_SECTION = `DETECTED CUSTOMER: unknown — use general rules.
 vendor_customercode: a code in [brackets]/(parentheses) near the company name or ชื่อผู้ซื้อ line; otherwise a labelled รหัสร้านค้า / Customer Code. Strip vendor prefixes from hyphenated codes (e.g. "TOP-M802316" → "802316").
 vendor_branch: only an explicitly labelled branch ("สาขาที่", "Branch", "Site code"); "Group [number]" is NOT a branch; return "" if none found.`
 
@@ -93,14 +93,14 @@ General rules (apply to every invoice):
 - Return ONLY a valid JSON array, no markdown fences, no explanation`
 }
 
-const FALLBACK_CUSTOMER_MASTER = [
+export const FALLBACK_CUSTOMER_MASTER = [
   { store_name: 'บิ๊กซี ซูเปอร์เซ็นเตอร์', customergroup: '01 - บิ๊กซี', customercode: '0100857 บิ๊กซี ซูเปอร์เซ็นเตอร์ จำกัด (มหาชน)', taxid: '0107537002445' },
   { store_name: 'โลตัส', customergroup: '05 - โลตัส', customercode: '0114682 ซีพี แอ็กซ์ตร้า จำกัด (โลตัส)', taxid: '0107567000414' },
   { store_name: 'แม็คโคร', customergroup: '04 - ซีพี แอ็กซ์ตร้า(Makro)', customercode: '0102856 ซีพี แอ็กซ์ตร้า จำกัด (Makro)', taxid: '0107567000414' },
   { store_name: 'เซ็นทรัล', customergroup: '11 - เซ็นทรัล', customercode: '0109266 เซ็นทรัลพัฒนา จำกัด (มหาชน)', taxid: '0107536000633' },
 ]
 
-function parseJsonFromText(text: string): object[] {
+export function parseJsonFromText(text: string): object[] {
   const stripped = text.trim().replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '')
   const parsed = JSON.parse(stripped)
   return Array.isArray(parsed) ? parsed : [parsed]
@@ -291,48 +291,54 @@ function isoToDmy(date: string): string {
   return `${m[3]}/${m[2]}/${m[1]}`
 }
 
-export default async function handler(req: Request, res: Response) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method Not Allowed' })
-  }
+/** Customer-master row shape used for the LLM lookup table. */
+export interface CustomerMasterEntry {
+  store_name: string
+  customergroup: string
+  customercode: string
+  taxid: string
+}
 
-  if (!await verifyAzureToken(req.headers.authorization)) {
-    return res.status(401).json({ error: 'Unauthorized' })
-  }
+/** Normalized inputs to the extraction core (already validated). */
+export interface ExtractCoreInput {
+  text: string
+  filename: string
+  /** Pre-built customer-specific prompt section (or DEFAULT_CUSTOMER_SECTION). */
+  customerSection: string
+  vendorCode: string
+  vendorBranch: string
+  /** Upper-cased customer id (e.g. "MAKRO", "LT", ""). */
+  customerId: string
+  /** JSON string of the customer-master lookup table (or FALLBACK). */
+  customerMasterJson: string
+  apiKey: string
+}
 
-  const apiKey = process.env.OPENROUTER_API_KEY
-  if (!apiKey) {
-    return res.status(500).json({ error: 'OPENROUTER_API_KEY not configured' })
-  }
+export type ExtractCoreResult =
+  | { ok: true; rows: Record<string, unknown>[] }
+  | { ok: false; status: number; error: string }
 
-  let text: string
-  let filename: string
-  let customerMasterJson: string
-  let customerSection: string
-  let vendorCode: string
-  let vendorBranch: string
-  let customerId: string
-  try {
-    const body = req.body || {}
-    text = (body.text || '').trim()
-    filename = body.filename || ''
-    if (!text) throw new Error('empty text')
-    customerSection = (body.customerInstructions || '').trim() || DEFAULT_CUSTOMER_SECTION
-    vendorCode = body.vendorCode || 'auto'
-    vendorBranch = body.vendorBranch || 'auto'
-    customerId = (body.customerId || '').toUpperCase()
-    const cm = body.customerMaster
-    customerMasterJson = (Array.isArray(cm) && cm.length > 0)
-      ? JSON.stringify(cm.map(({ store_name, customergroup, customercode, taxid }: {
-          store_name: string; customergroup: string; customercode: string; taxid: string
-        }) => ({ store_name, customergroup, customercode, taxid })))
-      : JSON.stringify(FALLBACK_CUSTOMER_MASTER)
-  } catch {
-    return res.status(400).json({ error: 'Expected { text: string, filename?: string, customerMaster?: array }' })
-  }
+/** Chat messages sent to the extraction model. Exported so the eval harness can
+ *  build an identical prompt for cache-keying without duplicating the format. */
+export function buildExtractMessages(
+  input: Pick<ExtractCoreInput, 'text' | 'filename' | 'customerSection' | 'customerMasterJson'>
+): { role: 'system' | 'user'; content: string }[] {
+  const truncated = input.text.length > 750000 ? input.text.slice(0, 750000) + '\n[truncated]' : input.text
+  return [
+    { role: 'system', content: buildSystemPrompt(input.customerMasterJson, input.customerSection) },
+    { role: 'user', content: `Filename: ${input.filename}\n\nInvoice text:\n\n${truncated}` },
+  ]
+}
 
-  const truncated = text.length > 750000 ? text.slice(0, 750000) + '\n[truncated]' : text
+export type ModelCallResult =
+  | { ok: true; content: string }
+  | { ok: false; status: number; error: string }
 
+/** The raw OpenRouter call: messages → model content string (un-parsed). */
+export async function callExtractModel(
+  messages: { role: string; content: string }[],
+  apiKey: string
+): Promise<ModelCallResult> {
   try {
     const apiRes = await fetch(OPENROUTER_URL, {
       method: 'POST',
@@ -340,33 +346,85 @@ export default async function handler(req: Request, res: Response) {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({
-        model: MODEL,
-        messages: [
-          { role: 'system', content: buildSystemPrompt(customerMasterJson, customerSection) },
-          { role: 'user', content: `Filename: ${filename}\n\nInvoice text:\n\n${truncated}` },
-        ],
-        temperature: 0.1,
-      }),
+      body: JSON.stringify({ model: MODEL, messages, temperature: 0.1 }),
     })
 
     if (!apiRes.ok) {
       const errText = await apiRes.text()
       if (apiRes.status === 429) {
-        return res.status(429).json({ error: 'API quota exceeded. Please try again shortly.' })
+        return { ok: false, status: 429, error: 'API quota exceeded. Please try again shortly.' }
       }
-      return res.status(502).json({ error: `OpenRouter ${apiRes.status}: ${errText.slice(0, 300)}` })
+      return { ok: false, status: 502, error: `OpenRouter ${apiRes.status}: ${errText.slice(0, 300)}` }
     }
 
     const data = await apiRes.json()
-    const raw: string = data?.choices?.[0]?.message?.content || '[]'
+    return { ok: true, content: data?.choices?.[0]?.message?.content || '[]' }
+  } catch (err) {
+    return { ok: false, status: 500, error: err instanceof Error ? err.message : String(err) }
+  }
+}
 
-    let rows: Record<string, unknown>[]
-    try {
-      rows = parseJsonFromText(raw) as Record<string, unknown>[]
-    } catch {
-      rows = []
-    }
+export interface PostProcessOpts {
+  text: string
+  /** Upload filename — used to derive divisionsale (the division token lives there). */
+  filename: string
+  vendorCode: string
+  vendorBranch: string
+  customerId: string
+  customerMasterJson: string
+}
+
+/**
+ * divisionsale is the sales-division code (DC / A / H / N / P) that staff encode
+ * in the upload filename, e.g. "…ซีเจ A รอบโอน…", "…(N).pdf", "…69 DC.pdf".
+ * The LLM cannot reliably see the filename, so we derive it deterministically.
+ * Returns "" when the filename carries no division token. "DC" wins over a single
+ * letter; the token must be standalone (bounded by non-Latin-letter chars), so it
+ * never fires on letters inside words like MAKRO / LOTUS / S006.
+ */
+export function extractDivisionFromFilename(filename: string): string {
+  const base = filename.replace(/\.[^./\\]+$/, '')
+  if (/(?:^|[^A-Za-z])DC(?=$|[^A-Za-z])/i.test(base)) return 'DC'
+  const m = base.match(/(?:^|[^A-Za-z])([AHNP])(?=$|[^A-Za-z])/i)
+  return m ? m[1].toUpperCase() : ''
+}
+
+/**
+ * Pure extraction core: build prompt → OpenRouter → JSON parse → deterministic
+ * post-processing → rows.  Contains NO auth, env, or Express dependency, so it
+ * can be called directly (e.g. by the eval harness in scripts/eval) as well as
+ * by the HTTP handler below.  Behavior is identical to the original handler.
+ */
+export async function extractRowsCore(input: ExtractCoreInput): Promise<ExtractCoreResult> {
+  const call = await callExtractModel(buildExtractMessages(input), input.apiKey)
+  if (!call.ok) return call
+
+  let rawRows: Record<string, unknown>[]
+  try {
+    rawRows = parseJsonFromText(call.content) as Record<string, unknown>[]
+  } catch {
+    rawRows = []
+  }
+
+  const rows = postProcessRows(rawRows, {
+    text: input.text,
+    filename: input.filename,
+    vendorCode: input.vendorCode,
+    vendorBranch: input.vendorBranch,
+    customerId: input.customerId,
+    customerMasterJson: input.customerMasterJson,
+  })
+  return { ok: true, rows }
+}
+
+/**
+ * Deterministic per-customer post-processing applied to the LLM's raw rows.
+ * Pure & synchronous (no network) — the eval harness can re-run this for free
+ * over cached raw model output to evaluate post-processing changes at zero LLM cost.
+ */
+export function postProcessRows(rawRows: Record<string, unknown>[], opts: PostProcessOpts): Record<string, unknown>[] {
+  const { text, vendorCode, vendorBranch, customerId, customerMasterJson } = opts
+  let rows = rawRows
 
     // Config-driven post-processing — deterministic overrides per customer.
     if (vendorCode === 'blank') {
@@ -540,7 +598,13 @@ export default async function handler(req: Request, res: Response) {
         const cutNetting = remark.indexOf('Netting')
         const cutStore   = remark.indexOf('สำหรับร้านค้า')
         const cut = cutNetting > 0 ? cutNetting : cutStore > 0 ? cutStore : -1
-        return cut > 0 ? { ...r, remark: remark.slice(0, cut).trim() } : r
+        const out = cut > 0 ? { ...r, remark: remark.slice(0, cut).trim() } : { ...r }
+        // CFR's in-house vendor code = "9" + the 6-digit TOP-M store code
+        // (e.g. 802316 → 9802316). Whether the code came from the deterministic
+        // TOP-M extractor or the LLM, normalise a bare 6-digit code here.
+        const vc = String((out.vendor_customercode as string) ?? '').trim()
+        if (/^\d{6}$/.test(vc)) out.vendor_customercode = '9' + vc
+        return out
       })
     }
 
@@ -602,6 +666,11 @@ export default async function handler(req: Request, res: Response) {
       }
     }
 
+    // divisionsale: derive from the upload filename (see extractDivisionFromFilename).
+    // Only override when a token is found, so vendors whose filename omits it keep "".
+    const division = extractDivisionFromFilename(opts.filename)
+    if (division) rows = rows.map((r) => ({ ...r, divisionsale: division }))
+
     // Convert dates from YYYY-MM-DD → DD/MM/YYYY for all customers.
     rows = rows.map((r) => ({
       ...r,
@@ -609,9 +678,53 @@ export default async function handler(req: Request, res: Response) {
       duedate:     isoToDmy(r.duedate as string),
     }))
 
-    return res.status(200).json({ rows })
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    return res.status(500).json({ error: message })
+  return rows
+}
+
+/** Build the customer-master JSON string used by the prompt (or FALLBACK when empty). */
+export function buildCustomerMasterJson(cm: unknown): string {
+  return (Array.isArray(cm) && cm.length > 0)
+    ? JSON.stringify((cm as CustomerMasterEntry[]).map(({ store_name, customergroup, customercode, taxid }) =>
+        ({ store_name, customergroup, customercode, taxid })))
+    : JSON.stringify(FALLBACK_CUSTOMER_MASTER)
+}
+
+export default async function handler(req: Request, res: Response) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method Not Allowed' })
   }
+
+  if (!await verifyAzureToken(req.headers.authorization)) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+
+  const apiKey = process.env.OPENROUTER_API_KEY
+  if (!apiKey) {
+    return res.status(500).json({ error: 'OPENROUTER_API_KEY not configured' })
+  }
+
+  let coreInput: ExtractCoreInput
+  try {
+    const body = req.body || {}
+    const text = (body.text || '').trim()
+    if (!text) throw new Error('empty text')
+    coreInput = {
+      text,
+      filename: body.filename || '',
+      customerSection: (body.customerInstructions || '').trim() || DEFAULT_CUSTOMER_SECTION,
+      vendorCode: body.vendorCode || 'auto',
+      vendorBranch: body.vendorBranch || 'auto',
+      customerId: (body.customerId || '').toUpperCase(),
+      customerMasterJson: buildCustomerMasterJson(body.customerMaster),
+      apiKey,
+    }
+  } catch {
+    return res.status(400).json({ error: 'Expected { text: string, filename?: string, customerMaster?: array }' })
+  }
+
+  const result = await extractRowsCore(coreInput)
+  if (!result.ok) {
+    return res.status(result.status).json({ error: result.error })
+  }
+  return res.status(200).json({ rows: result.rows })
 }
