@@ -322,6 +322,28 @@ function isoToDmy(date: string): string {
   return `${m[3]}/${m[2]}/${m[1]}`
 }
 
+/**
+ * Append a 1-based sequence suffix to invoiceno when one invoice number spans
+ * multiple line items: "X" with 3 rows → "X-1", "X-2", "X-3" (in row order).
+ * Single-item invoices are left unchanged. Accounting needs each line to carry a
+ * unique invoice reference. Used by both MAKRO and LT (Lotus).
+ */
+function appendInvoiceSeq(rows: Record<string, unknown>[]): Record<string, unknown>[] {
+  const counts = new Map<string, number>()
+  for (const r of rows) {
+    const inv = (r.invoiceno as string) || ''
+    if (inv) counts.set(inv, (counts.get(inv) || 0) + 1)
+  }
+  const seen = new Map<string, number>()
+  return rows.map((r) => {
+    const inv = (r.invoiceno as string) || ''
+    if (!inv || (counts.get(inv) || 0) <= 1) return r
+    const n = (seen.get(inv) || 0) + 1
+    seen.set(inv, n)
+    return { ...r, invoiceno: `${inv}-${n}` }
+  })
+}
+
 /** Customer-master row shape used for the LLM lookup table. */
 export interface CustomerMasterEntry {
   store_name: string
@@ -517,19 +539,7 @@ export function postProcessRows(rawRows: Record<string, unknown>[], opts: PostPr
         return { ...r, description: combined, product_description: '' }
       })
 
-      const counts = new Map<string, number>()
-      for (const r of rows) {
-        const inv = (r.invoiceno as string) || ''
-        if (inv) counts.set(inv, (counts.get(inv) || 0) + 1)
-      }
-      const seen = new Map<string, number>()
-      rows = rows.map((r) => {
-        const inv = (r.invoiceno as string) || ''
-        if (!inv || (counts.get(inv) || 0) <= 1) return r
-        const n = (seen.get(inv) || 0) + 1
-        seen.set(inv, n)
-        return { ...r, invoiceno: `${inv}-${n}` }
-      })
+      rows = appendInvoiceSeq(rows)
     }
 
     // LT (Lotus) — three server-side fixes:
@@ -566,6 +576,11 @@ export function postProcessRows(rawRows: Record<string, unknown>[], opts: PostPr
         const converted = convertLTVendorCode(code)
         return converted !== code ? { ...withDesc, vendor_customercode: converted } : withDesc
       })
+
+      // One Lotus invoice number spans several deal rows — append a running
+      // sequence suffix (…CN3-1, …CN3-2). Done LAST, after all invoiceno-based
+      // lookups above, so page isolation still works on the bare number.
+      rows = appendInvoiceSeq(rows)
     }
 
     // THEMALL (incl. City Mall Group / EM District / Emporium / EmQuartier /
