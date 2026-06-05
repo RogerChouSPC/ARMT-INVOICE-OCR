@@ -55,7 +55,7 @@ amount = the "รวม" subtotal (before VAT and tax).
 vat_7 = copy the amount printed on the "บวกภาษีมูลค่าเพิ่ม 7%(บาท)" line exactly (e.g. "700.00"); do NOT calculate.
 tax_3 = copy the amount printed on the "หักภาษี ณ ที่จ่าย 3%(บาท)" line exactly (e.g. "300.00"); do NOT calculate.
 netamount = copy the "รวมเป็นเงินทั้งสิ้น (บาท)" amount exactly (e.g. "10400.00"); do NOT calculate.
-remark = the text from the "หมายเหตุ" line: if "Netting" appears, stop before it; otherwise stop before "สำหรับร้านค้า". Do not include either boundary word or anything after it.`,
+remark = the COMPLETE หมายเหตุ note, verbatim. The note OFTEN WRAPS onto MULTIPLE lines — you MUST read every line of the note and join them into ONE string with single spaces. Do NOT stop at the first line; the wrapped continuation (e.g. the product name and the trailing "(59X11)" / "(349*4)" pack code) is part of the note and is the part most often dropped — always include it. The note starts right after the "หมายเหตุ" label (a code like "CFR_TD_R...(...)Week..'<product...>") and continues until — but NOT including — the word "Netting"; if "Netting" is absent, continue until — but NOT including — "สำหรับร้านค้า". Never include either boundary word or anything after it.`,
   },
   {
     id: 'CMK',
