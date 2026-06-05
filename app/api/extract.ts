@@ -238,6 +238,37 @@ function findLTDescription(pageText: string): string | null {
   return null
 }
 
+const LT_SECTION_RE = /\b(?:JN0[12]|JV0[12]|SN0[16]|SN12|SV03|ON01)\b/i
+
+/**
+ * For Lotus (LT) Format A (Credit Note): the JN01/JN02/JV01/... line is a
+ * SECTION header, and ONE credit note can contain several sections. Each deal
+ * row belongs to the section header that PRECEDES it. Given a string from the
+ * row that physically appears in the page (its deal-reference number, else its
+ * formatted amount), return the nearest section-header line above it.
+ * Returns null if there are no section headers or the anchor can't be located.
+ */
+function findLTSectionForRow(pageText: string, anchor: string | null): string | null {
+  if (!anchor) return null
+  const idx = pageText.indexOf(anchor)
+  if (idx < 0) return null
+  const lines = pageText.slice(0, idx).split(/\r?\n/)
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (LT_SECTION_RE.test(lines[i])) return lines[i].trim()
+  }
+  return null
+}
+
+/** Anchor used to locate an LT row in the page text: its deal-reference number
+ *  (a long digit run in product_description), falling back to its formatted amount. */
+function ltRowAnchor(r: Record<string, unknown>): string | null {
+  const ref = String(r.product_description ?? '').match(/\d{8,}/)
+  if (ref) return ref[0]
+  const amt = parseFloat(String(r.amount ?? '').replace(/,/g, ''))
+  if (!isNaN(amt) && amt > 0) return amt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return null
+}
+
 /**
  * For Lotus (LT) invoices: Lotus prints our vendor customer code as
  * "TH0XXXX"; our internal code is "9XXXX".  Convert by stripping "TH"
@@ -520,14 +551,16 @@ export function postProcessRows(rawRows: Record<string, unknown>[], opts: PostPr
         return inv !== '' && validInvoices.has(inv)
       })
 
-      const ltDescCache = new Map<string, string | null>()
       rows = rows.map((r) => {
         const invoiceNo = (r.invoiceno as string) || ''
-        if (!ltDescCache.has(invoiceNo)) {
-          const pageText = getInvoicePageSection(text, invoiceNo)
-          ltDescCache.set(invoiceNo, findLTDescription(pageText))
-        }
-        const desc = ltDescCache.get(invoiceNo)
+        const pageText = getInvoicePageSection(text, invoiceNo)
+        // Format A: resolve THIS row's section header (a credit note may hold
+        // several JN01/JN02/... sections — each row takes the header above its
+        // own deal reference, not the first header in the document). Fall back to
+        // the invoice-level description for Format D / when the row can't be located.
+        let desc: string | null = null
+        if (LT_SECTION_RE.test(pageText)) desc = findLTSectionForRow(pageText, ltRowAnchor(r))
+        if (desc == null) desc = findLTDescription(pageText)
         const withDesc = desc ? { ...r, description: desc } : r
         const code = (withDesc.vendor_customercode as string) || ''
         const converted = convertLTVendorCode(code)
