@@ -7,6 +7,7 @@ import ProcessingStatus from '@/components/ProcessingStatus'
 import ResultsTable from '@/components/ResultsTable'
 import TableSkeleton from '@/components/TableSkeleton'
 import CustomerMasterPage, { getCustomerMasterRows } from '@/components/CustomerMasterPage'
+import PaymentAdvicePage from '@/components/PaymentAdvicePage'
 import CustomerCycle from '@/components/CustomerCycle'
 import BackgroundPaths from '@/components/BackgroundPaths'
 import { extractPdfText, countPdfPages } from '@/utils/pdfTextExtractor'
@@ -16,7 +17,7 @@ import { exportToExcel } from '@/utils/excelExporter'
 import type { InvoiceRow, FileProcessingStatus } from '@/types/invoice'
 import { EMPTY_ROW } from '@/types/invoice'
 
-type Tab = 'ocr' | 'customer-master'
+type Tab = 'ocr' | 'customer-master' | 'payment-advice'
 
 const apiUrl = (path: string) => `${import.meta.env.BASE_URL}api/${path}`
 
@@ -198,6 +199,8 @@ export default function App() {
           <CustomerMasterPage />
         </main>
       )}
+
+      {activeTab === 'payment-advice' && <PaymentAdvicePage />}
 
       {activeTab === 'ocr' && (
         <main className="flex-1 w-full px-6 flex flex-col gap-6">

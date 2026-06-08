@@ -2,6 +2,7 @@ import express from 'express'
 import path from 'node:path'
 import ocrHandler from '../api/ocr.ts'
 import extractHandler from '../api/extract.ts'
+import paymentAdviceHandler from '../api/paymentAdvice.ts'
 
 const app = express()
 const PORT = Number(process.env.PORT) || 3000
@@ -18,6 +19,7 @@ app.get('/healthz', (_req, res) => {
 
 app.post('/api/ocr', ocrHandler)
 app.post('/api/extract', extractHandler)
+app.post('/api/payment-advice', paymentAdviceHandler)
 
 // Serve the built React app (index.html, popup.html, hashed assets, favicon).
 app.use(express.static(distDir))

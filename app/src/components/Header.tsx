@@ -2,7 +2,7 @@ import { motion } from 'framer-motion'
 import { Sparkles, LogOut, Sun, Moon, Zap, ZapOff } from 'lucide-react'
 import { useTheme } from '@/hooks/useTheme'
 
-type Tab = 'ocr' | 'customer-master'
+type Tab = 'ocr' | 'customer-master' | 'payment-advice'
 
 interface HeaderProps {
   rowCount: number
@@ -17,6 +17,7 @@ interface HeaderProps {
 const TAB_LABELS: Record<Tab, string> = {
   'ocr': 'Invoice Extract',
   'customer-master': 'Customer Master',
+  'payment-advice': 'Makro Payment Advice',
 }
 
 export default function Header({ activeTab, onTabChange, user, onLogout, liveEnabled, onToggleLive }: HeaderProps) {
@@ -39,7 +40,7 @@ export default function Header({ activeTab, onTabChange, user, onLogout, liveEna
           </div>
 
           <nav className="flex items-center h-full">
-            {(['ocr', 'customer-master'] as Tab[]).map((tab) => (
+            {(['ocr', 'customer-master', 'payment-advice'] as Tab[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => onTabChange(tab)}

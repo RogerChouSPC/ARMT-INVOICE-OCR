@@ -628,7 +628,7 @@ export function postProcessRows(rawRows: Record<string, unknown>[], opts: PostPr
         const cutNetting = remark.indexOf('Netting')
         const cutStore   = remark.indexOf('สำหรับร้านค้า')
         const cut = cutNetting > 0 ? cutNetting : cutStore > 0 ? cutStore : -1
-        const out = cut > 0 ? { ...r, remark: remark.slice(0, cut).trim() } : { ...r }
+        const out: Record<string, unknown> = cut > 0 ? { ...r, remark: remark.slice(0, cut).trim() } : { ...r }
         // CFR's in-house vendor code = "9" + the 6-digit TOP-M store code
         // (e.g. 802316 → 9802316). Whether the code came from the deterministic
         // TOP-M extractor or the LLM, normalise a bare 6-digit code here.

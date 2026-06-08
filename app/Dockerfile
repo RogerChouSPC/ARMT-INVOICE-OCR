@@ -25,6 +25,10 @@ FROM node:20-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
+# poppler-utils provides `pdftotext`, used by the Makro Payment Advice parser
+# (api/paymentAdvice.ts shells out to `pdftotext -layout`).
+RUN apk add --no-cache poppler-utils
+
 # Install runtime dependencies only (express + tsx, no build tooling).
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
