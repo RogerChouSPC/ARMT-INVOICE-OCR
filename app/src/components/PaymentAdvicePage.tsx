@@ -71,7 +71,7 @@ export default function PaymentAdvicePage() {
       {!hasResults && !processing && (
         <div className="text-center pt-16 pb-2 animate-fade-in">
           <h2 className="text-4xl font-bold text-foreground tracking-tight leading-[1.2]">
-            Makro Payment Advice
+            Makro Invoice Extract
           </h2>
           <p className="text-muted-foreground mt-3">
             Upload CP Axtra (Makro) Payment Advice PDFs → reconcile invoices against the bank transfer → download Excel.
