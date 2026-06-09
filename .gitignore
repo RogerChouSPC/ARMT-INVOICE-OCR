@@ -14,6 +14,9 @@ dist/
 # Logs
 *.log
 
+# Excel/Office temporary lock files
+~$*
+
 # Old Python app
 ARMT-INVOICE-OCR/venv/
 ARMT-INVOICE-OCR/__pycache__/
