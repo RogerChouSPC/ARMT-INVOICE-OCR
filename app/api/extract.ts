@@ -314,6 +314,15 @@ function findLTInvoiceCandidates(text: string): Set<string> {
   return found
 }
 
+/** Cut a captured note at the first boundary word ("Netting" or "สำหรับร้านค้า"),
+ *  dropping it and anything after. Shared by CFR/CMK/BTM/CJ/CFW note handling. */
+function cutAtNetting(s: string): string {
+  const a = s.indexOf('Netting')
+  const b = s.indexOf('สำหรับร้านค้า')
+  const cut = a > 0 ? a : b > 0 ? b : -1
+  return cut > 0 ? s.slice(0, cut).trim() : s.trim()
+}
+
 /** Convert YYYY-MM-DD → DD/MM/YYYY. Passes through anything that doesn't match. */
 function isoToDmy(date: string): string {
   if (!date) return date
@@ -619,22 +628,64 @@ export function postProcessRows(rawRows: Record<string, unknown>[], opts: PostPr
       })
     }
 
-    // CFR: truncate remark at the first boundary word found:
-    //   1. "Netting"        — netting/payment info starts here
-    //   2. "สำหรับร้านค้า" — store instructions start here (fallback if no Netting)
+    // CFR: the หมายเหตุ note lives in `remark`; truncate it at Netting/สำหรับร้านค้า.
     if (customerId === 'CFR') {
+      rows = rows.map((r) => ({ ...r, remark: cutAtNetting((r.remark as string) || '') }))
+    }
+
+    // CMK / BTM / CJ: the หมายเหตุ note goes into `product_description` (these
+    // invoices have no product-detail line); truncate it at Netting/สำหรับร้านค้า.
+    if (customerId === 'CMK' || customerId === 'BTM' || customerId === 'CJ') {
+      rows = rows.map((r) => ({ ...r, product_description: cutAtNetting((r.product_description as string) || '') }))
+    }
+
+    // CFW: description = รายการ + หมายเหตุ. Combine whatever the LLM put in
+    // description and product_description, cut at Netting, and blank product_description.
+    if (customerId === 'CFW') {
       rows = rows.map((r) => {
-        const remark = (r.remark as string) || ''
-        const cutNetting = remark.indexOf('Netting')
-        const cutStore   = remark.indexOf('สำหรับร้านค้า')
-        const cut = cutNetting > 0 ? cutNetting : cutStore > 0 ? cutStore : -1
-        const out: Record<string, unknown> = cut > 0 ? { ...r, remark: remark.slice(0, cut).trim() } : { ...r }
-        // CFR's in-house vendor code = "9" + the 6-digit TOP-M store code
-        // (e.g. 802316 → 9802316). Whether the code came from the deterministic
-        // TOP-M extractor or the LLM, normalise a bare 6-digit code here.
-        const vc = String((out.vendor_customercode as string) ?? '').trim()
-        if (/^\d{6}$/.test(vc)) out.vendor_customercode = '9' + vc
-        return out
+        const desc  = String((r.description as string) ?? '').trim()
+        const pdesc = String((r.product_description as string) ?? '').trim()
+        return { ...r, description: cutAtNetting([desc, pdesc].filter(Boolean).join(' ')), product_description: '' }
+      })
+    }
+
+    // In-house vendor_customercode normalisation:
+    //   CFR, CMK — "9" + the 6-digit store code (TOP-M802316 → 9802316).
+    //   BTM, CFW, HOMEPRO — keep digits only (CFW-M900548 → 900548; V.3103 → 3103).
+    if (customerId === 'CFR' || customerId === 'CMK') {
+      rows = rows.map((r) => {
+        const d = String((r.vendor_customercode as string) ?? '').replace(/\D/g, '')
+        return /^\d{6}$/.test(d) ? { ...r, vendor_customercode: '9' + d } : r
+      })
+    } else if (customerId === 'BTM' || customerId === 'CFW' || customerId === 'HOMEPRO') {
+      rows = rows.map((r) => {
+        const vc = String((r.vendor_customercode as string) ?? '')
+        const d = vc.replace(/\D/g, '')
+        return d && d !== vc ? { ...r, vendor_customercode: d } : r
+      })
+    }
+
+    // CJ withholding-tax calculation (classified per row from its description):
+    //   "ค่าปรับ"            → no WHT (tax_2 = tax_3 = 0)
+    //   "ค่าโฆษณา"/"โฆษณา"   → tax_2 = amount × 0.02
+    //   otherwise            → tax_3 = amount × 0.03
+    //   netamount = amount + vat_7 − tax_2 − tax_3   (vat_7 stays as printed)
+    if (customerId === 'CJ') {
+      rows = rows.map((r) => {
+        const amt = parseFloat(String((r.amount as string) ?? '').replace(/,/g, ''))
+        if (isNaN(amt)) return r
+        const cls = `${(r.description as string) ?? ''} ${(r.product_description as string) ?? ''}`
+        const vat = parseFloat(String((r.vat_7 as string) ?? '').replace(/,/g, '')) || 0
+        let tax2 = 0, tax3 = 0
+        if (/ค่าปรับ/.test(cls)) { /* penalty — no withholding */ }
+        else if (/ค่าโฆษณา|โฆษณา/.test(cls)) tax2 = amt * 0.02
+        else tax3 = amt * 0.03
+        return {
+          ...r,
+          tax_2:     tax2.toFixed(2),
+          tax_3:     tax3.toFixed(2),
+          netamount: (amt + vat - tax2 - tax3).toFixed(2),
+        }
       })
     }
 

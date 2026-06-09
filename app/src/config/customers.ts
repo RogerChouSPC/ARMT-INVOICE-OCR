@@ -62,8 +62,12 @@ remark = the COMPLETE หมายเหตุ note, verbatim. The note OFTEN WR
     label: 'Central + Matsumoto Kiyoshi (CMK)',
     match: { filenameKeywords: ['cmk'], nameKeywords: ['มัทสึโมโตะ', 'matsumoto'], taxids: ['0125558018410'] },
     extractMode: 'ocr',
-    vendorCode: 'buyer-line',
+    vendorCode: 'top-m-line',
     vendorBranch: 'blank',
+    notes: `vendor_customercode = the digits after "TOP-M" on the เจ้าของ/ตัวแทน(รหัสร้านค้า) line (e.g. "TOP-M802316" → "802316"). The server prepends "9" automatically (→ 9802316).
+description = the text AFTER the "รายการ" label (e.g. "ส่วนลดรับพิเศษ-เครดิต (Special GP)").
+product_description = this invoice has NO product line, so put the COMPLETE หมายเหตุ note here, verbatim — join every wrapped line into one string and stop BEFORE the word "Netting" (or "สำหรับร้านค้า" if there is no Netting). e.g. "OI01012519588CMKPromotion Compensation(29/10/2025-25/11/2025)4987115826403...Compensate WK264546 4748".
+vat_7 / tax_3 / netamount = copy the printed values ("บวกภาษีมูลค่าเพิ่ม 7%", "หักภาษี ณ ที่จ่าย 3%", "รวมเป็นเงินทั้งสิ้น"); do NOT calculate.`,
   },
   {
     id: 'CFM',
@@ -79,16 +83,22 @@ remark = the COMPLETE หมายเหตุ note, verbatim. The note OFTEN WR
     label: 'Beautrium (BTM)',
     match: { filenameKeywords: ['btm'], nameKeywords: ['บิวเทรี่ยม', 'beautrium'], taxids: ['0105555002130'] },
     extractMode: 'text',
-    vendorCode: 'header-bracket',
+    vendorCode: 'customer-line',
     vendorBranch: 'auto',
+    notes: `vendor_customercode = the digits in the customer code on the ชื่อลูกค้า line, which looks like "BTM-MC15009" → "15009" (strip the "BTM-MC" prefix; keep digits only). Do NOT use the "[321801]" number after the vendor's own company name.
+description = the รายการ column value.
+product_description = the COMPLETE หมายเหตุ note verbatim (e.g. "Compensate retail price (CRED) of period Mar-2026//DORCO", or "ค่าเปิดสาขาใหม่//ST090สาขา...//ELLIPS//Nov_25"); stop before "Netting"/"สำหรับร้านค้า".`,
   },
   {
     id: 'CFW',
     label: 'Central Food Wholesale (CFW)',
     match: { filenameKeywords: ['cfw'], nameKeywords: ['เซ็นทรัล ฟู้ด โฮลเซลล์'], taxids: ['0125565034662'] },
     extractMode: 'text',
-    vendorCode: 'header-bracket',
+    vendorCode: 'customer-line',
     vendorBranch: 'auto',
+    notes: `vendor_customercode = the digits in the customer code on the ชื่อลูกค้า line, which looks like "CFW-M900548" → "900548" (strip the "CFW-M" prefix; keep digits only). Do NOT use the "(040201)" number after the vendor's own company name.
+description = the รายการ value FOLLOWED BY the หมายเหตุ note, joined into ONE string (e.g. รายการ "NO RETURN / DAMAGED (ส่วนลดกรณีไม่คืนสินค้า)" + หมายเหตุ "NO RETURN_Period 26032026-25042026" → "NO RETURN / DAMAGED (ส่วนลดกรณีไม่คืนสินค้า) NO RETURN_Period 26032026-25042026"); stop the หมายเหตุ part before "Netting".
+product_description = "" (this vendor has no product-detail line).`,
   },
   {
     id: 'AEON',
@@ -119,7 +129,9 @@ remark = the COMPLETE หมายเหตุ note, verbatim. The note OFTEN WR
     extractMode: 'ocr',
     vendorCode: 'customer-line',
     vendorBranch: 'auto',
-    notes: 'product_description MUST be copied verbatim — never reword, translate, or "correct" Thai. e.g. keep "ค่ากระจายสินค้า dc fee" exactly; never rewrite it as "ค่าบริหารจัดการ (DC Fee)".',
+    notes: `description = the รายการ value (the charge type, e.g. "ค่ากระจายสินค้า (DC Fee)", "ค่าบริการพื้นที่หัวชั้น", "ค่าปรับพาเลท", "ค่าโฆษณาอื่นๆ"). Copy verbatim — never reword, translate, or "correct" Thai.
+product_description = the หมายเหตุ note verbatim (e.g. "CJ2025.8518.A_03.10 ระยะเวลา 25/11/25-24/12/25"); if the invoice has no หมายเหตุ, leave it "". Stop before "Netting".
+vat_7 = copy the printed VAT 7% value (often "0"); do NOT calculate. tax_2 / tax_3 / netamount are computed by the server from the description.`,
   },
   {
     id: 'FOODLAND',
@@ -171,7 +183,9 @@ Server calculates tax_2 / tax_3 / netamount — no need to extract them:
     extractMode: 'ocr',
     vendorCode: 'customer-line',
     vendorBranch: 'auto',
-    notes: 'vendor_customercode = the value next to "รหัสลูกค้า" (e.g. 1000515117). Drop any "/ V.xxxx" suffix.',
+    notes: `vendor_customercode = the digits of the "V.xxxx" code only — e.g. the line "รหัสลูกค้า 1000515117 / V.3103" → "3103". Do NOT use the long รหัสลูกค้า number (1000515117).
+description = the รายการ / รายการสินค้า column value (e.g. "ค่าใช้บริการระบบ VRM 09/2025").
+product_description = "" (this vendor has no product-detail line).`,
   },
   {
     id: 'LT',
