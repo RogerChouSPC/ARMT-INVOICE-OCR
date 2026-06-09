@@ -334,7 +334,7 @@ const stripThaiMarks = (s: string) => s.replace(THAI_MARKS_G, '')
 // (e.g. "ค่าส่วนลดชดเชยสินค้า" → "คาสวนลดชดเชยสินคา"). The charge is one of a small
 // known set, so when a row's description STARTS with the marks-stripped form of a
 // known charge, restore the correct charge prefix and keep the trailing text.
-const PT_CHARGES = ['ค่าส่วนลดชดเชยสินค้า', 'ค่าโฆษณา']
+const PT_CHARGES = ['ค่าส่วนลดชดเชยสินค้า', 'ค่าสินค้าแรกเข้า', 'ค่าโฆษณา']
   .map((c) => ({ canon: c, bare: stripThaiMarks(c) }))
   .sort((a, b) => b.bare.length - a.bare.length) // longest (most specific) first
 function restorePtCharge(desc: string): string {
