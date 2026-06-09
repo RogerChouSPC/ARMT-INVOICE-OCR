@@ -17,6 +17,23 @@ import { ocrImageCore } from './ocr.ts'
 
 const DPI = Number(process.env.OCR_RASTER_DPI || 200)
 const PAGE_BREAK = '\n\n--- PAGE BREAK ---\n\n'
+// OCR pages concurrently (like the old browser path did) so multi-page invoices
+// aren't slow. Capped so a large PDF doesn't trip OpenRouter rate limits.
+const OCR_CONCURRENCY = Number(process.env.OCR_CONCURRENCY || 8)
+
+/** Run fn over items with at most `n` in flight; preserves order. */
+async function pool<T, R>(items: T[], n: number, fn: (t: T, i: number) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length)
+  let idx = 0
+  async function worker() {
+    while (idx < items.length) {
+      const i = idx++
+      out[i] = await fn(items[i], i)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, worker))
+  return out
+}
 
 let cachedBin: string | null = null
 function findPdftoppm(): string {
@@ -88,12 +105,11 @@ export default async function handler(req: Request, res: Response) {
 
   try {
     const pages = renderPdfToPngBase64(pdfBytes)
-    const texts: string[] = []
-    for (const png of pages) {
+    const texts = await pool(pages, OCR_CONCURRENCY, async (png, p) => {
       const r = await ocrImageCore(png, apiKey)
-      if (!r.ok) return res.status(r.status).json({ error: r.error })
-      texts.push(r.text)
-    }
+      if (!r.ok) throw new Error(`page ${p + 1}: ${r.error}`)
+      return r.text
+    })
     return res.status(200).json({ text: texts.join(PAGE_BREAK), pages: pages.length })
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
