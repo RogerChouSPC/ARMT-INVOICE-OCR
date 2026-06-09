@@ -292,7 +292,10 @@ vat_7: calculate as amount × 0.07 for each line item (Makro prints only the tot
     vendorBranch: 'blank',
     notes: `vendor_customercode = the HANDWRITTEN number at the top-right of the invoice (often red-underlined, next to the division letter like "N"/"A"). It is usually one of: 059, 2424, F258, 3236, 2577, 2817, 2579 — read the handwriting and pick the closest of these; if you cannot read it, leave "".
 invoiceno = the "เลขที่สัญญา" value (e.g. 250189).
-description = the charge text after "ขอเรียกเก็บค่า" PLUS the small detail line right below it (e.g. "ส่งจาก 6800000311 Dry"), joined into one string; stop before "คิดเป็นเปอร์เซ็นต์". Examples: "ค่า DC", "ค่า OFF TAKE Vplus ส่งจาก 6900000297 Promotion vPlus Offtask", "ค่า VMI 1.00% 01/01/2026-31/01/2026".
+description = the charge text after "ขอเรียกเก็บค่า" PLUS the small detail line right below it (e.g. "ส่งจาก 6800000311 Dry"), joined into one string.
+  - For "ค่า DC" and "ค่า VMI" charges ONLY: ALSO append the "คิดเป็นเปอร์เซ็นต์" line and its percent value (e.g. "ค่า DC ส่งจาก 6800001098 Dry คิดเป็นเปอร์เซ็นต์ 5.00 %").
+  - For every OTHER charge (ค่า OFF TAKE, ค่าหัวชั้น, ค่า REBATE, …): stop before "คิดเป็นเปอร์เซ็นต์" (do NOT include it).
+  Examples: "ค่า OFF TAKE Vplus ส่งจาก 6900000297 Promotion vPlus Offtask", "ค่า VMI ... คิดเป็นเปอร์เซ็นต์ 1.00 %".
 product_description = "" (this vendor has no separate product-detail field).
 The server computes tax_2 / tax_3 / netamount.`,
   },
