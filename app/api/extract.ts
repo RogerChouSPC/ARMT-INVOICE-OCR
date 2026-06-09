@@ -323,6 +323,38 @@ function cutAtNetting(s: string): string {
   return cut > 0 ? s.slice(0, cut).trim() : s.trim()
 }
 
+// Thai non-spacing combining marks (upper/lower vowels + tone marks). Stripping
+// these from two strings lets us compare words ignoring marks the OCR dropped.
+// NOTE: deliberately excludes the spacing vowels า(0E32) ำ(0E33) ะ(0E30).
+const THAI_MARKS = /[ัิ-ฺ็-๎]/
+const THAI_MARKS_G = /[ัิ-ฺ็-๎]/g
+const stripThaiMarks = (s: string) => s.replace(THAI_MARKS_G, '')
+
+// PT (ปิโตรเลียมไทย): OCR sometimes drops Thai tone marks on the charge phrase
+// (e.g. "ค่าส่วนลดชดเชยสินค้า" → "คาสวนลดชดเชยสินคา"). The charge is one of a small
+// known set, so when a row's description STARTS with the marks-stripped form of a
+// known charge, restore the correct charge prefix and keep the trailing text.
+const PT_CHARGES = ['ค่าส่วนลดชดเชยสินค้า', 'ค่าโฆษณา']
+  .map((c) => ({ canon: c, bare: stripThaiMarks(c) }))
+  .sort((a, b) => b.bare.length - a.bare.length) // longest (most specific) first
+function restorePtCharge(desc: string): string {
+  const bare = stripThaiMarks(desc)
+  for (const { canon, bare: charge } of PT_CHARGES) {
+    if (!bare.startsWith(charge)) continue
+    // Consume `charge.length` non-mark chars from the original to find where the
+    // charge prefix ends, then skip any trailing marks that belonged to it.
+    let consumed = 0
+    let i = 0
+    while (i < desc.length && consumed < charge.length) {
+      if (!THAI_MARKS.test(desc[i])) consumed++
+      i++
+    }
+    while (i < desc.length && THAI_MARKS.test(desc[i])) i++
+    return (canon + desc.slice(i)).trim()
+  }
+  return desc
+}
+
 /** Convert YYYY-MM-DD → DD/MM/YYYY. Passes through anything that doesn't match. */
 function isoToDmy(date: string): string {
   if (!date) return date
@@ -648,7 +680,10 @@ export function postProcessRows(rawRows: Record<string, unknown>[], opts: PostPr
       rows = rows.map((r) => {
         const desc  = String((r.description as string) ?? '').trim()
         const pdesc = String((r.product_description as string) ?? '').trim()
-        return { ...r, description: cutAtNetting([desc, pdesc].filter(Boolean).join(' ')), product_description: '' }
+        let merged = cutAtNetting([desc, pdesc].filter(Boolean).join(' '))
+        // PT: repair the charge phrase when OCR dropped its Thai tone marks.
+        if (customerId === 'PT') merged = restorePtCharge(merged)
+        return { ...r, description: merged, product_description: '' }
       })
     }
 
