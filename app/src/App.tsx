@@ -13,7 +13,6 @@ import BackgroundPaths from '@/components/BackgroundPaths'
 import { useBeforeUnload } from '@/hooks/useBeforeUnload'
 import { extractPdfText, countPdfPages } from '@/utils/pdfTextExtractor'
 import { detectCustomer, shouldUseOcr, buildCustomerInstructions } from '@/config/customers'
-import { renderPdfPages } from '@/utils/pdfRenderer'
 import { exportToExcel } from '@/utils/excelExporter'
 import type { InvoiceRow, FileProcessingStatus } from '@/types/invoice'
 import { EMPTY_ROW } from '@/types/invoice'
@@ -21,6 +20,16 @@ import { EMPTY_ROW } from '@/types/invoice'
 type Tab = 'ocr' | 'customer-master' | 'payment-advice'
 
 const apiUrl = (path: string) => `${import.meta.env.BASE_URL}api/${path}`
+
+/** Read a File as a base64 string (no data: prefix) for sending to the API. */
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader()
+    r.onerror = () => reject(new Error(`Could not read ${file.name}`))
+    r.onload = () => resolve(String(r.result).split(',')[1] ?? '')
+    r.readAsDataURL(file)
+  })
+}
 
 export default function App() {
   const { user, loading, error, logout, getToken } = useAuth()
@@ -87,35 +96,28 @@ export default function App() {
           const { rows: r } = await res.json()
           extractedRows = r
         } else {
-          updateStatus(i, { state: 'ocr', progress: 25 })
-          const pages = await renderPdfPages(file, (cur, total) => {
-            updateStatus(i, { progress: 25 + (cur / total) * 35 })
-          })
-          // OCR all pages in parallel — far faster for multi-page invoices.
-          // Promise.all preserves order, so pages stay in sequence.
+          updateStatus(i, { state: 'ocr', progress: 35 })
+          // Render + OCR the whole PDF on the server (poppler), not in the browser.
+          // The browser's pdf.js renderer drops Thai combining marks for some fonts
+          // (e.g. PT invoices); poppler renders them correctly and this matches the
+          // eval harness, so production output equals the verified test results.
           const ocrToken = await getToken()
-          let ocrDone = 0
-          const ocrTexts = await Promise.all(pages.map(async (page, p) => {
-            const ocrRes = await fetch(apiUrl('ocr'), {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', ...(ocrToken ? { Authorization: `Bearer ${ocrToken}` } : {}) },
-              body: JSON.stringify({ image: page.base64 }),
-            })
-            if (!ocrRes.ok) {
-              const err = await ocrRes.json().catch(() => ({ error: `HTTP ${ocrRes.status}` }))
-              throw new Error(err.error || `OCR failed on page ${p + 1}`)
-            }
-            const { text } = await ocrRes.json()
-            ocrDone++
-            updateStatus(i, { progress: 60 + (ocrDone / pages.length) * 20 })
-            setPageStats((s) => ({ ...s, done: pagesBefore + ocrDone }))
-            return text as string
-          }))
+          const pdfBase64 = await fileToBase64(file)
+          const ocrRes = await fetch(apiUrl('ocr-pdf'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(ocrToken ? { Authorization: `Bearer ${ocrToken}` } : {}) },
+            body: JSON.stringify({ pdf: pdfBase64 }),
+          })
+          if (!ocrRes.ok) {
+            const err = await ocrRes.json().catch(() => ({ error: `HTTP ${ocrRes.status}` }))
+            throw new Error(err.error || `OCR failed: ${ocrRes.status}`)
+          }
+          const { text: ocrCombined } = await ocrRes.json()
+          setPageStats((s) => ({ ...s, done: pagesBefore + pageCount }))
           updateStatus(i, { state: 'extracting', progress: 80 })
           // Scanned PDFs have no embedded text, so pdfText may be empty/garbled
           // and the initial detectCustomer() above may have returned null.
           // Re-detect from the assembled OCR text now that we have real content.
-          const ocrCombined = ocrTexts.join('\n\n--- PAGE BREAK ---\n\n')
           const effectiveRule = customerRule ?? detectCustomer(ocrCombined, file.name)
           const effectivePayload = effectiveRule === customerRule
             ? customerPayload
