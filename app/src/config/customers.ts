@@ -149,7 +149,10 @@ vat_7 = copy the printed VAT 7% value (often "0"); do NOT calculate. tax_2 / tax
     extractMode: 'ocr',
     vendorCode: 'vendor-no',
     vendorBranch: 'auto',
-    notes: 'vendor_customercode = the value printed in the "Vendor No" field.',
+    notes: `vendor_customercode = the value printed in the "Vendor No" field.
+description = the รายการ value (e.g. "83-30: RD.Apr2026 มาม่าคัพ 80 ก. (ทุกรส) ปกติ 20 บาท").
+product_description = "" (this vendor has no separate product-detail field).
+The server computes tax_2 / tax_3 / netamount.`,
   },
   {
     id: 'THEMALL',
@@ -287,16 +290,36 @@ vat_7: calculate as amount × 0.07 for each line item (Makro prints only the tot
     extractMode: 'ocr',
     vendorCode: 'customer-line',
     vendorBranch: 'blank',
-    notes: 'vendor_customercode = the code on the right side of the invoice that starts with "PVC" (the prefix may vary).',
+    notes: `vendor_customercode = the HANDWRITTEN number at the top-right of the invoice (often red-underlined, next to the division letter like "N"/"A"). It is usually one of: 059, 2424, F258, 3236, 2577, 2817, 2579 — read the handwriting and pick the closest of these; if you cannot read it, leave "".
+invoiceno = the "เลขที่สัญญา" value (e.g. 250189).
+description = the charge text after "ขอเรียกเก็บค่า" PLUS the small detail line right below it (e.g. "ส่งจาก 6800000311 Dry"), joined into one string; stop before "คิดเป็นเปอร์เซ็นต์". Examples: "ค่า DC", "ค่า OFF TAKE Vplus ส่งจาก 6900000297 Promotion vPlus Offtask", "ค่า VMI 1.00% 01/01/2026-31/01/2026".
+product_description = "" (this vendor has no separate product-detail field).
+The server computes tax_2 / tax_3 / netamount.`,
   },
   {
     id: 'WATSON',
     label: 'Watsons',
-    match: { filenameKeywords: ['watson', 'watsons'], nameKeywords: ['watson', 'วัตสัน'] },
+    match: { filenameKeywords: ['watson', 'watsons'], nameKeywords: ['watson', 'วัตสัน'], taxids: ['0105539086260'] },
     extractMode: 'ocr',
     vendorCode: 'customer-line',
     vendorBranch: 'blank',
-    notes: 'vendor_customercode = the value next to "Attn:" on the right side of the invoice.',
+    notes: `vendor_customercode = the "LSxxxx" code at the top-right of the Attn box (e.g. "LS0013", "LS16985").
+description = the COMPLETE Description column — read EVERY line of the cell and join them into ONE string, verbatim (e.g. "SCANOUT/CONTRIBUTION 888 HEAD OFFICE WTC period 30/03/26-26/04/26").
+product_description = "" (this vendor has no separate product-detail field).
+The server computes tax_3 / netamount.`,
+  },
+  {
+    id: 'PT',
+    label: 'Petroleum Thai (PT)',
+    match: { filenameKeywords: ['ปิโตรเลียม', 'petroleum'], nameKeywords: ['ปิโตรเลียมไทย', 'petroleum thai'], taxids: ['0105535099511'] },
+    extractMode: 'ocr',
+    vendorCode: 'customer-line',
+    vendorBranch: 'blank',
+    notes: `vendor_customercode = the "รหัสลูกค้า :" value (e.g. 21000067).
+invoiceno = the "เลขที่อ้างอิง" value (e.g. 3500004504) — NOT the top "เลขที่"/EINV number, and NOT "เลขที่อ้างอิง2".
+description = the ENTIRE รายการสินค้า column — the charge line ("ค่าส่วนลดชดเชยสินค้า" / "ค่าโฆษณา") AND the product-detail line(s) below it (e.g. "มาม่าเส้นหมี่น้ำใส ชดเชย2บาท/ชิ้น"), joined into one string.
+product_description = "" (this vendor has no separate product-detail field — everything goes in description).
+The server computes tax_2 / tax_3 / netamount.`,
   },
   {
     id: 'TSURUHA',

@@ -43,7 +43,7 @@ FOLDER_HINT = {
 # code -> customers.ts rule id (expected). None = no rule exists for this vendor.
 CUSTOMER_ID = {
     'CJ': 'CJ', 'TSURUHA': 'TSURUHA', 'BTM': 'BTM', 'MM': 'BIGC_FOOD',
-    'BOOTS': 'BOOTS', 'PT': None, 'FOODLAND': 'FOODLAND', 'VILLA': 'VILLA',
+    'BOOTS': 'BOOTS', 'PT': 'PT', 'FOODLAND': 'FOODLAND', 'VILLA': 'VILLA',
     'AEON': 'AEON', 'CFM': 'CFM', 'CFR': 'CFR', 'CFW': 'CFW', 'CMK': 'CMK',
     'WATSON': 'WATSON', 'THE MALL': 'THEMALL', 'TFM': None, 'MAKRO': 'MAKRO',
     'CP ALL': 'CP_ALL', 'LOTUS': 'LT', 'BigC': 'BIGC', 'PTT': 'PTT',

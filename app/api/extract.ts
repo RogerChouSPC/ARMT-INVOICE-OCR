@@ -641,7 +641,10 @@ export function postProcessRows(rawRows: Record<string, unknown>[], opts: PostPr
 
     // CFW: description = รายการ + หมายเหตุ. Combine whatever the LLM put in
     // description and product_description, cut at Netting, and blank product_description.
-    if (customerId === 'CFW') {
+    // CFW / WATSON / PT all want the WHOLE description content in `description` with
+    // product_description blank — the LLM sometimes splits a multi-line cell across
+    // the two fields, so merge them here.
+    if (customerId === 'CFW' || customerId === 'WATSON' || customerId === 'PT') {
       rows = rows.map((r) => {
         const desc  = String((r.description as string) ?? '').trim()
         const pdesc = String((r.product_description as string) ?? '').trim()
@@ -665,21 +668,30 @@ export function postProcessRows(rawRows: Record<string, unknown>[], opts: PostPr
       })
     }
 
-    // Withholding-tax calculation for CJ / BTM / CFW (classified per row from its
-    // description; verified against each register):
-    //   "ค่าปรับ"            → no WHT (tax_2 = tax_3 = 0)   [CJ only has these]
-    //   "ค่าโฆษณา"/"โฆษณา"   → tax_2 = amount × 0.02
-    //   otherwise            → tax_3 = amount × 0.03
+    // Withholding-tax calculation (classified per row from its description) for the
+    // vendors that print only a grand-total / net-of-WHT figure. Verified against
+    // each register. Per vendor: an "ad" keyword triggers the 2% rate; "ค่าปรับ"
+    // (CJ only) means no WHT; everything else is 3%.
     //   netamount = amount + vat_7 − tax_2 − tax_3   (vat_7 stays as printed)
-    if (customerId === 'CJ' || customerId === 'BTM' || customerId === 'CFW') {
+    const TAX_RULES: Record<string, { ad: RegExp | null; penalty: boolean }> = {
+      CJ:     { ad: /ค่าโฆษณา|โฆษณา/, penalty: true },
+      BTM:    { ad: /ค่าโฆษณา|โฆษณา/, penalty: false },
+      CFW:    { ad: /ค่าโฆษณา|โฆษณา/, penalty: false },
+      PT:     { ad: /ค่าโฆษณา|โฆษณา/, penalty: false },
+      PTT:    { ad: /Media/i,          penalty: false },
+      WATSON: { ad: null,              penalty: false },  // always 3%
+      VILLA:  { ad: null,              penalty: false },  // always 3%
+    }
+    const taxRule = TAX_RULES[customerId]
+    if (taxRule) {
       rows = rows.map((r) => {
         const amt = parseFloat(String((r.amount as string) ?? '').replace(/,/g, ''))
         if (isNaN(amt)) return r
         const cls = `${(r.description as string) ?? ''} ${(r.product_description as string) ?? ''}`
         const vat = parseFloat(String((r.vat_7 as string) ?? '').replace(/,/g, '')) || 0
         let tax2 = 0, tax3 = 0
-        if (/ค่าปรับ/.test(cls)) { /* penalty — no withholding */ }
-        else if (/ค่าโฆษณา|โฆษณา/.test(cls)) tax2 = amt * 0.02
+        if (taxRule.penalty && /ค่าปรับ/.test(cls)) { /* penalty — no withholding */ }
+        else if (taxRule.ad && taxRule.ad.test(cls)) tax2 = amt * 0.02
         else tax3 = amt * 0.03
         return {
           ...r,
