@@ -665,12 +665,13 @@ export function postProcessRows(rawRows: Record<string, unknown>[], opts: PostPr
       })
     }
 
-    // CJ withholding-tax calculation (classified per row from its description):
-    //   "ค่าปรับ"            → no WHT (tax_2 = tax_3 = 0)
+    // Withholding-tax calculation for CJ / BTM / CFW (classified per row from its
+    // description; verified against each register):
+    //   "ค่าปรับ"            → no WHT (tax_2 = tax_3 = 0)   [CJ only has these]
     //   "ค่าโฆษณา"/"โฆษณา"   → tax_2 = amount × 0.02
     //   otherwise            → tax_3 = amount × 0.03
     //   netamount = amount + vat_7 − tax_2 − tax_3   (vat_7 stays as printed)
-    if (customerId === 'CJ') {
+    if (customerId === 'CJ' || customerId === 'BTM' || customerId === 'CFW') {
       rows = rows.map((r) => {
         const amt = parseFloat(String((r.amount as string) ?? '').replace(/,/g, ''))
         if (isNaN(amt)) return r
