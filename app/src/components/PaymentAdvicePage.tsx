@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { useAuth } from '@/auth/AuthProvider'
+import { useBeforeUnload } from '@/hooks/useBeforeUnload'
 import UploadZone from '@/components/UploadZone'
 import { exportPaymentAdviceExcel } from '@/utils/paymentAdviceExcel'
 import type { PaymentAdviceFile } from '@/types/paymentAdvice'
@@ -28,6 +29,9 @@ export default function PaymentAdvicePage() {
   const [files, setFiles] = useState<PaymentAdviceFile[]>([])
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Warn before refresh/close while there are parsed results or a run in progress.
+  useBeforeUnload(files.length > 0 || processing)
 
   const processFiles = useCallback(async (uploaded: File[]) => {
     if (uploaded.length === 0) return

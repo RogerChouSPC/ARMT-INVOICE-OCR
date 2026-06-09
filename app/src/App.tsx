@@ -10,6 +10,7 @@ import CustomerMasterPage, { getCustomerMasterRows } from '@/components/Customer
 import PaymentAdvicePage from '@/components/PaymentAdvicePage'
 import CustomerCycle from '@/components/CustomerCycle'
 import BackgroundPaths from '@/components/BackgroundPaths'
+import { useBeforeUnload } from '@/hooks/useBeforeUnload'
 import { extractPdfText, countPdfPages } from '@/utils/pdfTextExtractor'
 import { detectCustomer, shouldUseOcr, buildCustomerInstructions } from '@/config/customers'
 import { renderPdfPages } from '@/utils/pdfRenderer'
@@ -169,6 +170,10 @@ export default function App() {
       return { ...row, customergroup: best.customergroup, customercode: best.customercode }
     }))
   }, [])
+
+  // Warn before refresh/close while there are extracted rows or a run in progress —
+  // the data lives in memory only and would otherwise be lost silently.
+  useBeforeUnload(rows.length > 0 || isProcessing)
 
   if (!user) return <LoginPage initError={error} isLoading={loading} />
 
