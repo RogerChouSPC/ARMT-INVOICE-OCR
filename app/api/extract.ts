@@ -330,16 +330,17 @@ const THAI_MARKS = /[ัิ-ฺ็-๎]/
 const THAI_MARKS_G = /[ัิ-ฺ็-๎]/g
 const stripThaiMarks = (s: string) => s.replace(THAI_MARKS_G, '')
 
-// PT (ปิโตรเลียมไทย): OCR sometimes drops Thai tone marks on the charge phrase
-// (e.g. "ค่าส่วนลดชดเชยสินค้า" → "คาสวนลดชดเชยสินคา"). The charge is one of a small
-// known set, so when a row's description STARTS with the marks-stripped form of a
-// known charge, restore the correct charge prefix and keep the trailing text.
-const PT_CHARGES = ['ค่าส่วนลดชดเชยสินค้า', 'ค่าสินค้าแรกเข้า', 'ค่าโฆษณา']
-  .map((c) => ({ canon: c, bare: stripThaiMarks(c) }))
-  .sort((a, b) => b.bare.length - a.bare.length) // longest (most specific) first
-function restorePtCharge(desc: string): string {
+// Some vendors print a fixed charge phrase that OCR mangles by dropping Thai
+// tone marks (e.g. "ค่าส่วนลดชดเชยสินค้า" → "คาสวนลดชดเชยสินคา"). The charge is one
+// of a small known set, so when a description STARTS with the marks-stripped form
+// of a known charge, restore the correct charge prefix and keep the trailing text.
+type Charge = { canon: string; bare: string }
+const mkCharges = (arr: string[]): Charge[] =>
+  arr.map((c) => ({ canon: c, bare: stripThaiMarks(c) }))
+     .sort((a, b) => b.bare.length - a.bare.length) // longest (most specific) first
+function restoreLeadingCharge(desc: string, charges: Charge[]): string {
   const bare = stripThaiMarks(desc)
-  for (const { canon, bare: charge } of PT_CHARGES) {
+  for (const { canon, bare: charge } of charges) {
     if (!bare.startsWith(charge)) continue
     // Consume `charge.length` non-mark chars from the original to find where the
     // charge prefix ends, then skip any trailing marks that belonged to it.
@@ -354,6 +355,17 @@ function restorePtCharge(desc: string): string {
   }
   return desc
 }
+const PT_CHARGES = mkCharges(['ค่าส่วนลดชดเชยสินค้า', 'ค่าสินค้าแรกเข้า', 'ค่าโฆษณา'])
+const restorePtCharge = (d: string) => restoreLeadingCharge(d, PT_CHARGES)
+// TSURUHA reference charge list (the line below No.1), per staff.
+const TSURUHA_CHARGES = mkCharges([
+  'ค่าชดเชยส่วนลด',
+  'ค่าดำเนินการนำเข้าข้อมูลสินค้าใหม่',
+  'ค่าบริการชดเชยปรับราคาทุน',
+  'ค่า DC Fee 1.7%',
+])
+// TSURUHA product names that, when present in the รายการ, go to product_description.
+const TSURUHA_PRODUCTS = ['Kincho', 'Dorco']
 
 /** Convert YYYY-MM-DD → DD/MM/YYYY. Passes through anything that doesn't match. */
 function isoToDmy(date: string): string {
@@ -709,14 +721,25 @@ export function postProcessRows(rawRows: Record<string, unknown>[], opts: PostPr
       }
       rows = [...groups.values()].map((grp) => {
         const descs: string[] = []
+        const products: string[] = []
         let sum = 0
         for (const r of grp) {
-          const d = String((r.description as string) ?? '').trim()
+          let d = String((r.description as string) ?? '').trim()
+          // Pull known product names (Kincho/Dorco) out of the รายการ into
+          // product_description; drop them from the description text.
+          for (const p of TSURUHA_PRODUCTS) {
+            const re = new RegExp(p, 'i')
+            if (!re.test(d)) continue
+            if (!products.some((x) => x.toLowerCase() === p.toLowerCase())) products.push(p)
+            d = d.replace(re, '').trim()
+          }
           if (d && !descs.includes(d)) descs.push(d)
           const a = parseFloat(String((r.amount as string) ?? '').replace(/,/g, ''))
           if (!isNaN(a)) sum += a
         }
-        return { ...grp[0], description: descs.join(' '), product_description: '', amount: sum.toFixed(2) }
+        // Repair the leading charge phrase when OCR dropped its Thai tone marks.
+        const description = restoreLeadingCharge(descs.join(' '), TSURUHA_CHARGES)
+        return { ...grp[0], description, product_description: products.join(' '), amount: sum.toFixed(2) }
       })
     }
 

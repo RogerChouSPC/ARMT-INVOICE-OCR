@@ -349,9 +349,9 @@ Each row carries 3% withholding tax ("ภาษี ณ ที่จ่าย 3%"
     notes: `invoiceno = the "INV No." value at the top-right (e.g. IV213/13032026).
 vendor_customercode = the "Vendor" field value (e.g. 007003).
 ONE invoice = ONE output row — do NOT split each Description line into its own row.
-description = the ENTIRE Description column merged into ONE string: the charge line (No.1, e.g. "ค่ารถเขตต่างจังหวัด") AND every "(Period ...) <channel>" line below it (e.g. "(Period 01 - 28/02/2026) All Store", "... Lazada", "... Shopee").
+description = the ENTIRE Description column merged into ONE string: the charge line (No.1) AND every "(Period ...) <channel>" line below it (e.g. "(Period 01 - 28/02/2026) All Store", "... Lazada", "... Shopee"). The No.1 charge line is usually one of: "ค่าชดเชยส่วนลด", "ค่าดำเนินการนำเข้าข้อมูลสินค้าใหม่", "ค่าบริการชดเชยปรับราคาทุน", "ค่า DC Fee 1.7%" — read it exactly as written (the server also repairs dropped Thai marks).
 amount = the "Total before Vat" value (e.g. 71,756.00) — NOT the individual per-line amounts.
-product_description = "".
+product_description = if a product name "Kincho" or "Dorco" appears in the Description list, put it here; otherwise "".
 vat_7 = the "VAT" value (0 when it shows "-").
 The server computes tax_3 (3% of amount) and netamount.`,
   },
