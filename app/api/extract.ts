@@ -694,6 +694,32 @@ export function postProcessRows(rawRows: Record<string, unknown>[], opts: PostPr
       rows = rows.map((r) => ({ ...r, invoiceno: '', product_description: '', vat_7: '0' }))
     }
 
+    // TSURUHA: one invoice = ONE row. The Description cell lists a charge line
+    // plus several "(Period …) <channel>" lines (All Store / Lazada / Shopee);
+    // the LLM tends to emit one row per line. Collapse rows that share an
+    // invoiceno into a single row — join their descriptions and set amount to
+    // the sum of the line amounts (which equals the printed "Total before Vat").
+    // tax_3 / netamount are then computed on that total by the TAX_RULES block.
+    if (customerId === 'TSURUHA') {
+      const groups = new Map<string, Record<string, unknown>[]>()
+      for (const r of rows) {
+        const key = String((r.invoiceno as string) ?? '').trim()
+        if (!groups.has(key)) groups.set(key, [])
+        groups.get(key)!.push(r)
+      }
+      rows = [...groups.values()].map((grp) => {
+        const descs: string[] = []
+        let sum = 0
+        for (const r of grp) {
+          const d = String((r.description as string) ?? '').trim()
+          if (d && !descs.includes(d)) descs.push(d)
+          const a = parseFloat(String((r.amount as string) ?? '').replace(/,/g, ''))
+          if (!isNaN(a)) sum += a
+        }
+        return { ...grp[0], description: descs.join(' '), product_description: '', amount: sum.toFixed(2) }
+      })
+    }
+
     // In-house vendor_customercode normalisation:
     //   CFR, CMK — "9" + the 6-digit store code (TOP-M802316 → 9802316).
     //   BTM, CFW, HOMEPRO — keep digits only (CFW-M900548 → 900548; V.3103 → 3103).
@@ -724,6 +750,7 @@ export function postProcessRows(rawRows: Record<string, unknown>[], opts: PostPr
       WATSON: { ad: null,              penalty: false },  // always 3%
       VILLA:  { ad: null,              penalty: false },  // always 3%
       AEON:   { ad: null,              penalty: false },  // always 3%, VAT 0% (vat_7 forced 0 above)
+      TSURUHA:{ ad: null,              penalty: false },  // always 3% on the merged "Total before Vat"
     }
     const taxRule = TAX_RULES[customerId]
     if (taxRule) {

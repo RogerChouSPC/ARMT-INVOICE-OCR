@@ -342,11 +342,18 @@ Each row carries 3% withholding tax ("ภาษี ณ ที่จ่าย 3%"
   {
     id: 'TSURUHA',
     label: 'Tsuruha',
-    match: { filenameKeywords: ['tsuruha'], nameKeywords: ['tsuruha', 'ซูรูฮะ'] },
+    match: { filenameKeywords: ['tsuruha'], nameKeywords: ['tsuruha', 'ซูรูฮะ'], taxids: ['0105554157903'] },
     extractMode: 'ocr',
     vendorCode: 'customer-line',
     vendorBranch: 'auto',
-    notes: 'vendor_customercode = the value of the "Vendor" field.',
+    notes: `invoiceno = the "INV No." value at the top-right (e.g. IV213/13032026).
+vendor_customercode = the "Vendor" field value (e.g. 007003).
+ONE invoice = ONE output row — do NOT split each Description line into its own row.
+description = the ENTIRE Description column merged into ONE string: the charge line (No.1, e.g. "ค่ารถเขตต่างจังหวัด") AND every "(Period ...) <channel>" line below it (e.g. "(Period 01 - 28/02/2026) All Store", "... Lazada", "... Shopee").
+amount = the "Total before Vat" value (e.g. 71,756.00) — NOT the individual per-line amounts.
+product_description = "".
+vat_7 = the "VAT" value (0 when it shows "-").
+The server computes tax_3 (3% of amount) and netamount.`,
   },
   {
     id: 'BIGC_FOOD',
