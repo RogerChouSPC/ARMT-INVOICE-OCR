@@ -687,6 +687,13 @@ export function postProcessRows(rawRows: Record<string, unknown>[], opts: PostPr
       })
     }
 
+    // AEON: no invoice number on the output, no product-detail field, and the
+    // invoice is VAT 0% — force those deterministically. netamount is computed
+    // per line by the TAX_RULES block below (3% WHT), NOT taken from the total.
+    if (customerId === 'AEON') {
+      rows = rows.map((r) => ({ ...r, invoiceno: '', product_description: '', vat_7: '0' }))
+    }
+
     // In-house vendor_customercode normalisation:
     //   CFR, CMK — "9" + the 6-digit store code (TOP-M802316 → 9802316).
     //   BTM, CFW, HOMEPRO — keep digits only (CFW-M900548 → 900548; V.3103 → 3103).
@@ -716,6 +723,7 @@ export function postProcessRows(rawRows: Record<string, unknown>[], opts: PostPr
       PTT:    { ad: /Media/i,          penalty: false },
       WATSON: { ad: null,              penalty: false },  // always 3%
       VILLA:  { ad: null,              penalty: false },  // always 3%
+      AEON:   { ad: null,              penalty: false },  // always 3%, VAT 0% (vat_7 forced 0 above)
     }
     const taxRule = TAX_RULES[customerId]
     if (taxRule) {

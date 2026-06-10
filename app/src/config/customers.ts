@@ -325,6 +325,21 @@ product_description = "" (this vendor has no separate product-detail field — e
 The server computes tax_2 / tax_3 / netamount.`,
   },
   {
+    id: 'AEON',
+    label: 'AEON (Thailand)',
+    match: { filenameKeywords: ['aeon', 'อิออน'], nameKeywords: ['อิออน', 'aeon'], taxids: ['0105527044125'] },
+    extractMode: 'ocr',
+    vendorCode: 'customer-line',
+    vendorBranch: 'blank',
+    notes: `invoiceno = "" (LEAVE BLANK — do NOT extract the top-right "เลขที่" number).
+vendor_customercode = the "รหัสซื้อ" value at the top-right (e.g. 017906).
+description = the value in the highlighted "รับชำระเป็นค่า" column — the COMPLETE text of that cell for the row (e.g. "ค่าส่งเสริมการขาย Slip# DN04-26000728", "ค่าศูนย์กระจายสินค้า เดือน 4/2026 Slip# SL711-26003217").
+product_description = "" (no separate product-detail field).
+amount = the "จำนวนเงิน (บาท)" value for the row (may be negative, e.g. -36.91).
+vat_7 = 0 (this invoice is VAT 0%).
+Each row carries 3% withholding tax ("ภาษี ณ ที่จ่าย 3%"). The server computes tax_3 / netamount PER LINE — do NOT take netamount from the grand total.`,
+  },
+  {
     id: 'TSURUHA',
     label: 'Tsuruha',
     match: { filenameKeywords: ['tsuruha'], nameKeywords: ['tsuruha', 'ซูรูฮะ'] },
