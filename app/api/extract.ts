@@ -725,11 +725,13 @@ export function postProcessRows(rawRows: Record<string, unknown>[], opts: PostPr
         let sum = 0
         for (const r of grp) {
           let d = String((r.description as string) ?? '').trim()
-          // Pull known product names (Kincho/Dorco) out of the รายการ into
-          // product_description; drop them from the description text.
+          const pd = String((r.product_description as string) ?? '').trim()
+          // Pull known product names (Kincho/Dorco) into product_description —
+          // the LLM may have put them in EITHER field — and drop them from the
+          // description text when present there.
           for (const p of TSURUHA_PRODUCTS) {
             const re = new RegExp(p, 'i')
-            if (!re.test(d)) continue
+            if (!re.test(d) && !re.test(pd)) continue
             if (!products.some((x) => x.toLowerCase() === p.toLowerCase())) products.push(p)
             d = d.replace(re, '').trim()
           }
@@ -741,6 +743,19 @@ export function postProcessRows(rawRows: Record<string, unknown>[], opts: PostPr
         const description = restoreLeadingCharge(descs.join(' '), TSURUHA_CHARGES)
         return { ...grp[0], description, product_description: products.join(' '), amount: sum.toFixed(2) }
       })
+
+      // Safety net: the product names are reliable keywords. If the source text
+      // mentions one but the LLM dropped it from both fields, attach it — only
+      // when this upload is a single invoice (one row), so it can't be misattributed.
+      if (rows.length === 1) {
+        const have = String((rows[0].product_description as string) ?? '')
+        const found = TSURUHA_PRODUCTS.filter(
+          (p) => new RegExp(p, 'i').test(text) && !new RegExp(p, 'i').test(have)
+        )
+        if (found.length) {
+          rows[0] = { ...rows[0], product_description: [have, ...found].filter(Boolean).join(' ') }
+        }
+      }
     }
 
     // In-house vendor_customercode normalisation:
