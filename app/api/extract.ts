@@ -716,9 +716,30 @@ export function postProcessRows(rawRows: Record<string, unknown>[], opts: PostPr
     if (customerId === 'BOOTS') {
       const cleanDesc = (s: string) =>
         s.replace(/\s*\bRef\b\.?.*$/i, '').replace(/\s+/g, ' ').trim()
+      // Boots rebate/fee invoices have exactly two categories, but OCR mangles
+      // the leading word ("Supplier" → "Suplpler"). Classify by voting on the
+      // reliable tokens (Rebate/Flat/0.5% vs Distribution/Fee/Income/1.5%) and
+      // map to the canonical category label, so misreads still group correctly.
+      // Lines matching neither (e.g. a general "SP7 Scan out" invoice) fall back
+      // to cleanDesc, leaving single-line invoices a no-op.
+      const classify = (s: string): string => {
+        const lc = s.toLowerCase()
+        let reb = 0
+        let fee = 0
+        if (/rebate/.test(lc)) reb++
+        if (/flat/.test(lc)) reb++
+        if (/0\s*[.,]\s*5\s*%/.test(lc)) reb++
+        if (/distribution/.test(lc)) fee++
+        if (/\bfee\b/.test(lc)) fee++
+        if (/income/.test(lc)) fee++
+        if (/1\s*[.,]\s*5\s*%/.test(lc)) fee++
+        if (reb > 0 && reb >= fee) return 'Supplier/Flat Rebate (0.5%)'
+        if (fee > 0) return 'Distribution Fee Income (1.5%)'
+        return cleanDesc(s)
+      }
       const groups = new Map<string, Record<string, unknown>[]>()
       for (const r of rows) {
-        const key = cleanDesc(String((r.description as string) ?? ''))
+        const key = classify(String((r.description as string) ?? ''))
         if (!groups.has(key)) groups.set(key, [])
         groups.get(key)!.push(r)
       }
