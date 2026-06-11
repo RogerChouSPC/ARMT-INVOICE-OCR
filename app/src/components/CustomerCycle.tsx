@@ -15,18 +15,20 @@ export default function CustomerCycle() {
 
   // setTimeout pattern — resets every time index changes, no drift.
   // Skip the rotation entirely when the user prefers reduced motion.
+  // Slower cadence (3.4s) so the accent reads as quiet, not kinetic.
   useEffect(() => {
     if (reduceMotion) return
     const id = setTimeout(() => {
       setIndex(i => (i + 1) % CUSTOMERS.length)
-    }, 2400)
+    }, 3400)
     return () => clearTimeout(id)
   }, [index, reduceMotion])
 
   return (
     <div className="flex justify-center items-center gap-3">
-      {/* overflow-hidden clips the spring motion above/below */}
-      <span className="relative flex justify-center overflow-hidden text-6xl font-bold tracking-tight leading-[1.2] py-1">
+      {/* overflow-hidden clips the small slide above/below. Scale matches the
+          calmer hero heading (text-3xl / sm:text-4xl). */}
+      <span className="relative flex justify-center overflow-hidden text-3xl sm:text-4xl font-bold tracking-tight leading-tight py-1">
         {/* invisible widest-name spacer gives the container correct width + height */}
         <span className="invisible select-none" aria-hidden>Big C Food</span>
 
@@ -38,12 +40,14 @@ export default function CustomerCycle() {
             <motion.span
               key={i}
               className="absolute text-primary"
-              initial={{ opacity: 0, y: 100 }}
-              transition={{ type: 'spring', stiffness: 50 }}
+              // Quiet crossfade with a small (≤6px) ease-out slide — a subtle
+              // accent rather than a spring-driven kinetic centerpiece.
+              initial={{ opacity: 0, y: 6 }}
+              transition={{ duration: 0.5, ease: 'easeOut' }}
               animate={
                 index === i
                   ? { y: 0, opacity: 1 }
-                  : { y: index > i ? -100 : 100, opacity: 0 }
+                  : { y: index > i ? -6 : 6, opacity: 0 }
               }
             >
               {name}

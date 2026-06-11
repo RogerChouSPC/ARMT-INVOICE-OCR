@@ -59,9 +59,21 @@ function FloatingPaths({ position }: { position: number }) {
   )
 }
 
-export default function BackgroundPaths() {
+export default function BackgroundPaths({ dimmed = false }: { dimmed?: boolean }) {
   return (
-    <div className="fixed inset-0 overflow-hidden pointer-events-none z-[1]">
+    // Opacity is driven directly via inline style (not a JS-revealed class) so it
+    // renders correctly on headless/first paint. In the empty/hero state the field
+    // is full strength; once the operator is in the table zone it fades to a faint
+    // 10% so it never reduces contrast behind dense data. The CSS transition is
+    // auto-neutralised under prefers-reduced-motion by the global guard in index.css,
+    // leaving just the lower static opacity (no animation).
+    <div
+      className="fixed inset-0 overflow-hidden pointer-events-none z-[1]"
+      style={{
+        opacity: dimmed ? 0.1 : 1,
+        transition: 'opacity 500ms ease-out',
+      }}
+    >
       <FloatingPaths position={1} />
       <FloatingPaths position={-1} />
     </div>
