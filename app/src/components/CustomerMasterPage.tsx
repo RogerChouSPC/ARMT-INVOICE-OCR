@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import * as XLSX from 'xlsx'
 import { CUSTOMER_MASTER_SEED } from '@/config/customerMasterSeed'
 import ConfirmDialog from '@/components/ConfirmDialog'
+import { useGridNavigation } from '@/hooks/useGridNavigation'
 
 export interface CustomerRow {
   id: string
@@ -241,10 +242,11 @@ export default function CustomerMasterPage() {
   }, [history, rows])
 
   // ── cell edit ─────────────────────────────────────────────────────────────
-  const startEdit = (rowIdx: number, col: keyof CustomerRow) => {
+  const startEdit = (rowIdx: number, col: keyof CustomerRow, initialChar?: string) => {
     if (col === 'id') return
     setEditCell({ row: rowIdx, col })
-    setEditValue(rows[rowIdx][col] as string)
+    // type-to-edit replaces the value with the typed character.
+    setEditValue(initialChar !== undefined ? initialChar : (rows[rowIdx][col] as string))
   }
 
   const commitEdit = () => {
@@ -270,6 +272,16 @@ export default function CustomerMasterPage() {
     setRows(prev => prev.filter((_, i) => i !== idx))
     setDirty(true)
   }
+
+  // ── spreadsheet keyboard navigation (shared hook) ──────────────────────────
+  const nav = useGridNavigation<keyof CustomerRow & string>({
+    rowCount: rows.length,
+    columns: COLS.map(c => c.key) as (keyof CustomerRow & string)[],
+    isEditing: editCell !== null,
+    onStartEdit: (r, colKey, ch) => startEdit(r, colKey as keyof CustomerRow, ch),
+    onCommit: commitEdit,
+    onCancel: () => setEditCell(null),
+  })
 
   // ── import Excel ──────────────────────────────────────────────────────────
   const importExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -389,16 +401,35 @@ export default function CustomerMasterPage() {
 
         {/* ── Table ──────────────────────────────────────────────────────────── */}
         <div className="card overflow-hidden flex-1 min-w-0">
-          <div className="table-container">
+          <div
+            className="table-container grid-nav"
+            ref={nav.containerRef}
+            tabIndex={0}
+            role="grid"
+            aria-label="Customer master"
+            onKeyDown={nav.onContainerKeyDown}
+          >
             <table className="w-full text-xs border-collapse">
               <thead>
                 <tr className="bg-google-blue-light">
-                  <th className="px-2 py-2.5 text-left font-medium text-muted-foreground border-b border-border w-8 text-center">#</th>
-                  {COLS.map(c => (
-                    <th key={c.key as string} className="px-3 py-2.5 text-left font-medium text-muted-foreground border-b border-border whitespace-nowrap" style={{ minWidth: c.width }}>
-                      {c.label}
-                    </th>
-                  ))}
+                  <th
+                    className="px-2 py-2.5 text-left font-medium text-muted-foreground border-b border-border w-8 text-center grid-frozen grid-frozen-head"
+                    style={{ left: 0, zIndex: 30 }}
+                  >#</th>
+                  {COLS.map((c, ci) => {
+                    const frozen = ci === 0   // freeze the first identity column (store_name)
+                    return (
+                      <th
+                        key={c.key as string}
+                        className={`px-3 py-2.5 text-left font-medium text-muted-foreground border-b border-border whitespace-nowrap${
+                          frozen ? ' grid-frozen grid-frozen-head grid-frozen-edge' : ''
+                        }`}
+                        style={{ minWidth: c.width, ...(frozen ? { left: 32, zIndex: 30 } : null) }}
+                      >
+                        {c.label}
+                      </th>
+                    )
+                  })}
                   <th className="px-2 py-2.5 border-b border-border w-8" />
                 </tr>
               </thead>
@@ -407,21 +438,33 @@ export default function CustomerMasterPage() {
                   <tr key={row.id} className={`border-b border-border transition-colors duration-700 group ${
                     highlightedRows.has(row.id) ? 'bg-amber-50 dark:bg-amber-950/30' : 'hover:bg-muted/40'
                   }`}>
-                    <td className="px-2 py-1 text-center text-muted-foreground">{ri + 1}</td>
-                    {COLS.map(c => {
+                    <td
+                      className={`px-2 py-1 text-center text-muted-foreground grid-frozen grid-frozen-body ${
+                        highlightedRows.has(row.id) ? 'grid-frozen-hl' : ''
+                      }`}
+                      style={{ left: 0, zIndex: 5 }}
+                    >{ri + 1}</td>
+                    {COLS.map((c, ci) => {
                       const isEditing  = editCell?.row === ri && editCell?.col === c.key
+                      const isActive   = !isEditing && nav.active?.row === ri && nav.active?.col === ci
                       const isDirty    = dirtyCells.has(`${row.id}:${String(c.key)}`)
                       const isCellDiff = highlightedCells.has(`${row.id}:${String(c.key)}`)
+                      const frozen     = ci === 0
                       const val = row[c.key] as string
                       return (
                         <td
                           key={c.key as string}
+                          data-grid-cell={`${ri}-${ci}`}
                           className={`px-1.5 py-1 cursor-text transition-colors duration-700 ${
+                            frozen ? 'grid-frozen grid-frozen-body grid-frozen-edge ' : ''
+                          }${frozen && highlightedRows.has(row.id) ? 'grid-frozen-hl ' : ''}${
                             isEditing  ? 'bg-google-blue-light ring-1 ring-google-blue ring-inset rounded' :
+                            isActive   ? 'grid-active' :
                             isCellDiff ? 'bg-amber-200 dark:bg-amber-800/60' :
                             isDirty    ? 'bg-amber-100 dark:bg-amber-950/50' : ''
                           }`}
-                          onClick={() => !isEditing && startEdit(ri, c.key)}
+                          style={frozen ? { left: 32, zIndex: isEditing ? 6 : 5 } : undefined}
+                          onClick={() => { nav.setActive({ row: ri, col: ci }); if (!isEditing) startEdit(ri, c.key) }}
                         >
                           {isEditing ? (
                             <input
@@ -431,10 +474,9 @@ export default function CustomerMasterPage() {
                               style={{ minWidth: c.width - 16 }}
                               onChange={e => setEditValue(e.target.value)}
                               onBlur={commitEdit}
-                              onKeyDown={e => {
-                                if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); commitEdit() }
-                                if (e.key === 'Escape') setEditCell(null)
-                              }}
+                              // Enter (commit + advance down), Tab/Shift-Tab (commit + move),
+                              // Esc (cancel + refocus grid) handled by the shared nav hook.
+                              onKeyDown={nav.handleEditKeyDown}
                             />
                           ) : (
                             <span

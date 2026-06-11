@@ -2,6 +2,25 @@ import { useState, useEffect, useRef } from 'react'
 import type { InvoiceRow } from '@/types/invoice'
 import { INVOICE_COLUMNS } from '@/types/invoice'
 import ConfirmDialog from '@/components/ConfirmDialog'
+import { useGridNavigation } from '@/hooks/useGridNavigation'
+
+// ── Frozen leading columns ──────────────────────────────────────────────────
+// We pin the row-action column + the first two identity columns (seq,
+// customergroup) so the operator never loses which row they're on while
+// scrolling the 22-wide table horizontally. Offsets are cumulative pixel
+// widths measured from the left edge.
+const ACTION_COL_W = 40           // leading delete-button cell (w-10)
+const FROZEN_DATA_COLS = 2        // seq + customergroup
+// Cumulative left offset for each frozen INVOICE_COLUMNS cell (index 0..n-1).
+const FROZEN_LEFTS: number[] = (() => {
+  const lefts: number[] = []
+  let acc = ACTION_COL_W
+  for (let i = 0; i < FROZEN_DATA_COLS; i++) {
+    lefts.push(acc)
+    acc += INVOICE_COLUMNS[i].width
+  }
+  return lefts
+})()
 
 // Money columns that should carry a soft "not a number" hint when non-empty and unparseable.
 const MONEY_COLS = new Set<keyof InvoiceRow>([
@@ -61,9 +80,11 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
     return () => document.removeEventListener('keydown', fn)
   }, [fullscreen])
 
-  if (rows.length === 0) return null
+  const COL_KEYS = INVOICE_COLUMNS.map(c => c.key)
 
-  const pushSnapshot = (targetRows?: InvoiceRow[]) => {
+  // Declared as hoisted functions so the nav hook (below) can reference them
+  // without tripping use-before-declaration, while still capturing fresh state.
+  function pushSnapshot(targetRows?: InvoiceRow[]) {
     const target = targetRows ?? rows
     const json = JSON.stringify(target)
     if (json === lastSnapshotJson.current) return
@@ -71,9 +92,32 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
     setHistory(prev => [...prev, { rows: target.map(r => ({ ...r })), timestamp: new Date() }])
   }
 
-  const updateCell = (rowIdx: number, col: keyof InvoiceRow, value: string) => {
+  function updateCell(rowIdx: number, col: keyof InvoiceRow, value: string) {
     onUpdate(rows.map((r, i) => (i === rowIdx ? { ...r, [col]: value } : r)))
   }
+
+  // Begin editing a cell. `initialChar` (type-to-edit) replaces the cell value.
+  function startEditAt(rowIdx: number, col: keyof InvoiceRow, initialChar?: string) {
+    pushSnapshot()
+    if (initialChar !== undefined) updateCell(rowIdx, col, initialChar)
+    setEditCell({ row: rowIdx, col })
+  }
+
+  // Commit the in-progress edit (value already lives in `rows`); checkpoint it.
+  function commitEdit() {
+    pushSnapshot()
+    setEditCell(null)
+  }
+
+  // Spreadsheet keyboard navigation (shared hook).
+  const nav = useGridNavigation<keyof InvoiceRow & string>({
+    rowCount: rows.length,
+    columns: COL_KEYS as (keyof InvoiceRow & string)[],
+    isEditing: editCell !== null,
+    onStartEdit: (r, colKey, ch) => startEditAt(r, colKey as keyof InvoiceRow, ch),
+    onCommit: () => commitEdit(),
+    onCancel: () => setEditCell(null),
+  })
 
   const deleteRow = (idx: number) => {
     pushSnapshot()
@@ -82,6 +126,7 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
 
   const handleCellClick = (rowIdx: number, col: keyof InvoiceRow) => {
     pushSnapshot()
+    nav.setActive({ row: rowIdx, col: COL_KEYS.indexOf(col) })
     setEditCell({ row: rowIdx, col })
   }
 
@@ -125,6 +170,8 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
     : showHistory
       ? 'table-container flex-1 min-w-0'
       : 'table-container'
+
+  if (rows.length === 0) return null
 
   return (
     <div className={fullscreen
@@ -177,20 +224,38 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
 
       {/* Body: table + optional history sidebar */}
       <div className={`flex ${fullscreen ? 'flex-1 overflow-hidden' : ''}`}>
-        <div className={tableWrapClass}>
+        <div
+          className={`${tableWrapClass} grid-nav`}
+          ref={nav.containerRef}
+          tabIndex={0}
+          role="grid"
+          aria-label="Extracted invoice data"
+          onKeyDown={nav.onContainerKeyDown}
+        >
           <table className="w-full text-xs border-collapse">
             <thead>
               <tr className="bg-google-blue-light">
-                <th className="px-3 py-2.5 text-left font-medium text-muted-foreground border-b border-border whitespace-nowrap w-10" />
-                {INVOICE_COLUMNS.map((col) => (
-                  <th
-                    key={col.key}
-                    className="px-3 py-2.5 text-left font-medium text-muted-foreground border-b border-border whitespace-nowrap"
-                    style={{ minWidth: col.width }}
-                  >
-                    {col.label}
-                  </th>
-                ))}
+                <th
+                  className="px-3 py-2.5 text-left font-medium text-muted-foreground border-b border-border whitespace-nowrap w-10 grid-frozen grid-frozen-head"
+                  style={{ left: 0, zIndex: 30 }}
+                />
+                {INVOICE_COLUMNS.map((col, colIdx) => {
+                  const frozen = colIdx < FROZEN_DATA_COLS
+                  return (
+                    <th
+                      key={col.key}
+                      className={`px-3 py-2.5 text-left font-medium text-muted-foreground border-b border-border whitespace-nowrap${
+                        frozen ? ' grid-frozen grid-frozen-head' : ''
+                      }${frozen && colIdx === FROZEN_DATA_COLS - 1 ? ' grid-frozen-edge' : ''}`}
+                      style={{
+                        minWidth: col.width,
+                        ...(frozen ? { left: FROZEN_LEFTS[colIdx], zIndex: 30 } : null),
+                      }}
+                    >
+                      {col.label}
+                    </th>
+                  )
+                })}
               </tr>
             </thead>
             <tbody>
@@ -203,7 +268,12 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
                       : 'hover:bg-muted/40'
                   }`}
                 >
-                  <td className="px-2 py-1.5 text-center">
+                  <td
+                    className={`px-2 py-1.5 text-center grid-frozen grid-frozen-body ${
+                      highlightedRows.has(rowIdx) ? 'grid-frozen-hl' : ''
+                    }`}
+                    style={{ left: 0, zIndex: 5 }}
+                  >
                     <button
                       type="button"
                       aria-label={`Delete row ${rowIdx + 1}`}
@@ -217,17 +287,26 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
                     </button>
                   </td>
 
-                  {INVOICE_COLUMNS.map((col) => {
+                  {INVOICE_COLUMNS.map((col, colIdx) => {
                     const isEditing   = editCell?.row === rowIdx && editCell?.col === col.key
                     const isCellDiff  = highlightedCells.has(`${rowIdx}:${col.key}`)
+                    const isActive    = !isEditing && nav.active?.row === rowIdx && nav.active?.col === colIdx
+                    const frozen      = colIdx < FROZEN_DATA_COLS
                     const value = String(row[col.key] ?? '')
                     return (
                       <td
                         key={col.key}
+                        data-grid-cell={`${rowIdx}-${colIdx}`}
                         className={`px-1.5 py-1 transition-colors duration-700 ${
+                          frozen ? 'grid-frozen grid-frozen-body ' : ''
+                        }${frozen && highlightedRows.has(rowIdx) ? 'grid-frozen-hl ' : ''}${
+                          frozen && colIdx === FROZEN_DATA_COLS - 1 ? 'grid-frozen-edge ' : ''
+                        }${
                           isEditing  ? 'bg-google-blue-light ring-1 ring-google-blue ring-inset rounded' :
+                          isActive   ? 'grid-active' :
                           isCellDiff ? 'bg-amber-200 dark:bg-amber-800/60' : ''
                         }`}
+                        style={frozen ? { left: FROZEN_LEFTS[colIdx], zIndex: isEditing ? 6 : 5 } : undefined}
                         onClick={() => handleCellClick(rowIdx, col.key)}
                       >
                         {isEditing ? (
@@ -241,14 +320,10 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
                               pushSnapshot(finalRows)
                               setEditCell(null)
                             }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                const finalRows = rows.map((r, i) => i === rowIdx ? { ...r, [col.key]: e.currentTarget.value } : r)
-                                pushSnapshot(finalRows)
-                                setEditCell(null)
-                              }
-                              if (e.key === 'Escape') setEditCell(null)
-                            }}
+                            // Enter (commit + advance down), Tab/Shift-Tab (commit + move),
+                            // Esc (cancel + refocus grid) are handled by the shared nav hook.
+                            // Arrows are left to move the text caret inside the input.
+                            onKeyDown={nav.handleEditKeyDown}
                             style={{ minWidth: col.width - 12 }}
                           />
                         ) : (
