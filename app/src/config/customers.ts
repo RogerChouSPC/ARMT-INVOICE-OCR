@@ -140,7 +140,11 @@ vat_7 = copy the printed VAT 7% value (often "0"); do NOT calculate. tax_2 / tax
     extractMode: 'ocr',
     vendorCode: 'ac-no',
     vendorBranch: 'auto',
-    notes: 'vendor_customercode = the value of the "A/C No" field (e.g. 929509). "ลำดับที่สาขา" is our own branch, not the vendor code.',
+    notes: `vendor_customercode = the "A/C No." value at the top-right. It is EXACTLY ONE of these four codes — output the complete matching value, do not truncate: 929509, 912074, 929508, 92950801.
+description = combine into ONE string: the charge after "เกี่ยวกับ" (e.g. "ค่าตั้งโชว์"), the period "ในช่วง วันที่ … ถึงวันที่ …", the "รายละเอียด" detail line (e.g. "ผลิตภัณฑ์ สหพัฒน์"), and the "โดยทาง …" line (e.g. "SAHAPATTANAPIBUL (NON FOOD)"). Read every one of these lines.
+product_description = "" (no separate product-detail field).
+"ลำดับที่สาขา" is our own branch, NOT the vendor code.
+The server computes tax_2 / tax_3 / netamount.`,
   },
   {
     id: 'PTT',

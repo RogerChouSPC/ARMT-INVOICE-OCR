@@ -688,7 +688,7 @@ export function postProcessRows(rawRows: Record<string, unknown>[], opts: PostPr
     // CFW / WATSON / PT all want the WHOLE description content in `description` with
     // product_description blank — the LLM sometimes splits a multi-line cell across
     // the two fields, so merge them here.
-    if (customerId === 'CFW' || customerId === 'WATSON' || customerId === 'PT') {
+    if (customerId === 'CFW' || customerId === 'WATSON' || customerId === 'PT' || customerId === 'FOODLAND') {
       rows = rows.map((r) => {
         const desc  = String((r.description as string) ?? '').trim()
         const pdesc = String((r.product_description as string) ?? '').trim()
@@ -774,6 +774,32 @@ export function postProcessRows(rawRows: Record<string, unknown>[], opts: PostPr
       })
     }
 
+    // FOODLAND: the A/C No. is always one of a known set; OCR may misread it.
+    // Snap to an exact digits match, or to the single closest code within edit
+    // distance 2. Leave ambiguous reads alone (929508 is a prefix of 92950801,
+    // so a truncated 92950801 can't be safely distinguished from 929508).
+    if (customerId === 'FOODLAND') {
+      const CODES = ['929509', '912074', '929508', '92950801']
+      const lev = (a: string, b: string): number => {
+        const dp = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)])
+        for (let j = 0; j <= b.length; j++) dp[0][j] = j
+        for (let i = 1; i <= a.length; i++)
+          for (let j = 1; j <= b.length; j++)
+            dp[i][j] = Math.min(dp[i-1][j] + 1, dp[i][j-1] + 1, dp[i-1][j-1] + (a[i-1] === b[j-1] ? 0 : 1))
+        return dp[a.length][b.length]
+      }
+      rows = rows.map((r) => {
+        const d = String((r.vendor_customercode as string) ?? '').replace(/\D/g, '')
+        if (!d) return r
+        if (CODES.includes(d)) return { ...r, vendor_customercode: d }
+        const scored = CODES.map((c) => ({ c, dist: lev(d, c) })).sort((x, y) => x.dist - y.dist)
+        if (scored[0].dist <= 2 && (scored.length < 2 || scored[1].dist > scored[0].dist)) {
+          return { ...r, vendor_customercode: scored[0].c }
+        }
+        return { ...r, vendor_customercode: d }
+      })
+    }
+
     // Withholding-tax calculation (classified per row from its description) for the
     // vendors that print only a grand-total / net-of-WHT figure. Verified against
     // each register. Per vendor: an "ad" keyword triggers the 2% rate; "ค่าปรับ"
@@ -784,6 +810,7 @@ export function postProcessRows(rawRows: Record<string, unknown>[], opts: PostPr
       BTM:    { ad: /ค่าโฆษณา|โฆษณา/, penalty: false },
       CFW:    { ad: /ค่าโฆษณา|โฆษณา/, penalty: false },
       PT:     { ad: /ค่าโฆษณา|โฆษณา/, penalty: false },
+      FOODLAND:{ ad: /ค่าโฆษณา|โฆษณา/, penalty: false },  // ค่าโฆษณา → 2%, else 3%
       PTT:    { ad: /Media/i,          penalty: false },
       WATSON: { ad: null,              penalty: false },  // always 3%
       VILLA:  { ad: null,              penalty: false },  // always 3%
