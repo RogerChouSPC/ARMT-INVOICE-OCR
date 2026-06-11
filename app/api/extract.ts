@@ -706,9 +706,41 @@ export function postProcessRows(rawRows: Record<string, unknown>[], opts: PostPr
       rows = rows.map((r) => ({ ...r, invoiceno: '', product_description: '', vat_7: '0' }))
     }
 
-    // BOOTS: vendor_expensecode / vendor_expensegroup are not used — always blank.
+    // BOOTS: collapse line items by their description (trailing "Ref. …" removed)
+    // into ONE row per description, summing amounts (and any VAT). On the
+    // rebate/fee invoice this yields exactly two rows — "Supplier/Flat Rebate
+    // (0.5%)" and "Distribution Fee Income (1.5%)" — each summing its many
+    // Ref-tagged lines. For a single-line invoice (e.g. "SP7 Scan out") it is a
+    // no-op. tax_3 / netamount are then computed per merged row by TAX_RULES.
+    // vendor_expensecode / vendor_expensegroup are not used → always blank.
     if (customerId === 'BOOTS') {
-      rows = rows.map((r) => ({ ...r, vendor_expensecode: '', vendor_expensegroup: '' }))
+      const cleanDesc = (s: string) =>
+        s.replace(/\s*\bRef\b\.?.*$/i, '').replace(/\s+/g, ' ').trim()
+      const groups = new Map<string, Record<string, unknown>[]>()
+      for (const r of rows) {
+        const key = cleanDesc(String((r.description as string) ?? ''))
+        if (!groups.has(key)) groups.set(key, [])
+        groups.get(key)!.push(r)
+      }
+      rows = [...groups.entries()].map(([desc, grp]) => {
+        let sum = 0
+        let vatSum = 0
+        for (const r of grp) {
+          const a = parseFloat(String((r.amount as string) ?? '').replace(/,/g, ''))
+          if (!isNaN(a)) sum += a
+          const v = parseFloat(String((r.vat_7 as string) ?? '').replace(/,/g, ''))
+          if (!isNaN(v)) vatSum += v
+        }
+        return {
+          ...grp[0],
+          description: desc,
+          product_description: '',
+          amount: sum.toFixed(2),
+          vat_7: vatSum.toFixed(2),
+          vendor_expensecode: '',
+          vendor_expensegroup: '',
+        }
+      })
     }
 
     // TSURUHA: one invoice = ONE row. The Description cell lists a charge line
