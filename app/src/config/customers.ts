@@ -101,15 +101,6 @@ description = the รายการ value FOLLOWED BY the หมายเหต
 product_description = "" (this vendor has no product-detail line).`,
   },
   {
-    id: 'AEON',
-    label: 'AEON',
-    match: { filenameKeywords: ['aeon'], nameKeywords: ['อิออน'], taxids: ['0105527044125'] },
-    extractMode: 'ocr',
-    vendorCode: 'customer-line',
-    vendorBranch: 'auto',
-    notes: 'NEVER calculate or derive any tax/VAT amount — only copy figures explicitly printed on the invoice. vendor_customercode = the value of the "รหัสผู้ซื้อ" field.',
-  },
-  {
     id: 'BOOTS',
     label: 'Boots',
     match: { filenameKeywords: ['boots'], nameKeywords: ['บู๊ทส์', 'boots retail'], taxids: ['0115539007084'] },

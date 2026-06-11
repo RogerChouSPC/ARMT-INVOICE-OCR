@@ -5,7 +5,7 @@ import { DropdownMenu } from 'radix-ui'
 const CUSTOMERS = [
   'Aeon', 'Big C', 'Big C Food', 'Boots', 'BTM',
   'CFM', 'CFR', 'CFW', 'CJ', 'CMK', 'CP All',
-  'Foodland', 'HomePro', 'Lotus', 'Makro', 'PTT',
+  'Foodland', 'HomePro', 'Lotus', 'Makro', 'PT', 'PTT',
   'TFG', 'The Mall', 'Tsuruha', 'Villa', 'Watson',
 ]
 
