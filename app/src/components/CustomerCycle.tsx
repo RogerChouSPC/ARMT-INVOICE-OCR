@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import { DropdownMenu } from 'radix-ui'
 
 const CUSTOMERS = [
@@ -10,15 +10,18 @@ const CUSTOMERS = [
 ]
 
 export default function CustomerCycle() {
+  const reduceMotion = useReducedMotion()
   const [index, setIndex] = useState(0)
 
-  // setTimeout pattern — resets every time index changes, no drift
+  // setTimeout pattern — resets every time index changes, no drift.
+  // Skip the rotation entirely when the user prefers reduced motion.
   useEffect(() => {
+    if (reduceMotion) return
     const id = setTimeout(() => {
       setIndex(i => (i + 1) % CUSTOMERS.length)
     }, 2400)
     return () => clearTimeout(id)
-  }, [index])
+  }, [index, reduceMotion])
 
   return (
     <div className="flex justify-center items-center gap-3">
@@ -27,21 +30,26 @@ export default function CustomerCycle() {
         {/* invisible widest-name spacer gives the container correct width + height */}
         <span className="invisible select-none" aria-hidden>Big C Food</span>
 
-        {CUSTOMERS.map((name, i) => (
-          <motion.span
-            key={i}
-            className="absolute text-primary"
-            initial={{ opacity: 0, y: 100 }}
-            transition={{ type: 'spring', stiffness: 50 }}
-            animate={
-              index === i
-                ? { y: 0, opacity: 1 }
-                : { y: index > i ? -100 : 100, opacity: 0 }
-            }
-          >
-            {name}
-          </motion.span>
-        ))}
+        {reduceMotion ? (
+          // Static single frame — visuals present, no looping motion.
+          <span className="absolute text-primary">{CUSTOMERS[index]}</span>
+        ) : (
+          CUSTOMERS.map((name, i) => (
+            <motion.span
+              key={i}
+              className="absolute text-primary"
+              initial={{ opacity: 0, y: 100 }}
+              transition={{ type: 'spring', stiffness: 50 }}
+              animate={
+                index === i
+                  ? { y: 0, opacity: 1 }
+                  : { y: index > i ? -100 : 100, opacity: 0 }
+              }
+            >
+              {name}
+            </motion.span>
+          ))
+        )}
       </span>
 
       <DropdownMenu.Root>

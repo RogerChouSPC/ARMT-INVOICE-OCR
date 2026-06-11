@@ -1,6 +1,19 @@
 import { useState, useEffect, useRef } from 'react'
 import type { InvoiceRow } from '@/types/invoice'
 import { INVOICE_COLUMNS } from '@/types/invoice'
+import ConfirmDialog from '@/components/ConfirmDialog'
+
+// Money columns that should carry a soft "not a number" hint when non-empty and unparseable.
+const MONEY_COLS = new Set<keyof InvoiceRow>([
+  'amount', 'vat_7', 'tax_pct', 'tax_2', 'tax_3', 'tax_5', 'netamount',
+])
+
+// A value is "bad numeric" only when it is non-empty AND cannot parse as a number
+// (commas/spaces tolerated, since amounts may be formatted). Light touch — never blocks editing.
+const isBadNumeric = (v: string) => {
+  if (!v.trim()) return false
+  return Number.isNaN(Number(v.replace(/[, ]/g, '')))
+}
 
 interface Snapshot {
   rows: InvoiceRow[]
@@ -19,6 +32,8 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
   const [history, setHistory] = useState<Snapshot[]>([])
   const [highlightedRows, setHighlightedRows] = useState<Set<number>>(new Set())
   const [highlightedCells, setHighlightedCells] = useState<Set<string>>(new Set())
+  const [confirmDeleteRow, setConfirmDeleteRow] = useState<number | null>(null)
+  const [confirmClearHistory, setConfirmClearHistory] = useState(false)
   const initialSaved = useRef(false)
   const lastSnapshotJson = useRef('')
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -190,8 +205,10 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
                 >
                   <td className="px-2 py-1.5 text-center">
                     <button
-                      onClick={() => deleteRow(rowIdx)}
-                      className="w-5 h-5 rounded text-muted-foreground/30 hover:text-destructive hover:bg-destructive/10 transition-colors opacity-0 group-hover:opacity-100 flex items-center justify-center"
+                      type="button"
+                      aria-label={`Delete row ${rowIdx + 1}`}
+                      onClick={() => setConfirmDeleteRow(rowIdx)}
+                      className="w-5 h-5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary flex items-center justify-center"
                       title="Delete row"
                     >
                       <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current">
@@ -236,9 +253,15 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
                           />
                         ) : (
                           <span
-                            className={`block truncate px-1 py-0.5 rounded cursor-text ${value ? 'text-foreground' : 'text-muted-foreground/40 italic'}`}
+                            className={`block truncate px-1 py-0.5 rounded cursor-text ${
+                              !value
+                                ? 'text-placeholder italic'
+                                : MONEY_COLS.has(col.key) && isBadNumeric(value)
+                                  ? 'text-destructive'
+                                  : 'text-foreground'
+                            }`}
                             style={{ maxWidth: col.width - 12 }}
-                            title={value}
+                            title={MONEY_COLS.has(col.key) && isBadNumeric(value) ? 'ไม่ใช่ตัวเลข' : value}
                           >
                             {value || '—'}
                           </span>
@@ -258,7 +281,7 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
             <div className="px-3 py-2.5 border-b border-border flex items-center justify-between shrink-0">
               <span className="text-xs font-semibold text-foreground">History</span>
               <button
-                onClick={clearHistory}
+                onClick={() => setConfirmClearHistory(true)}
                 className="text-xs text-muted-foreground hover:text-destructive transition-colors"
               >
                 Clear
@@ -267,11 +290,8 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
 
             <div className="flex flex-col">
               {/* Current state — not clickable */}
-              <div
-                className="px-3 py-2.5 border-b border-border bg-primary/5"
-                style={{ borderLeft: '2px solid hsl(var(--primary))' }}
-              >
-                <div className="text-xs font-medium text-primary">Current</div>
+              <div className="px-3 py-2.5 border-b border-border bg-primary/5">
+                <div className="text-xs font-bold text-primary">Current</div>
                 <div className="text-xs text-muted-foreground mt-0.5">{rows.length} rows</div>
               </div>
 
@@ -295,6 +315,27 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmDeleteRow !== null}
+        title="Delete this row?"
+        message="This removes the row from the extracted data. You can undo via version history."
+        confirmLabel="Delete"
+        onConfirm={() => {
+          if (confirmDeleteRow !== null) deleteRow(confirmDeleteRow)
+          setConfirmDeleteRow(null)
+        }}
+        onCancel={() => setConfirmDeleteRow(null)}
+      />
+
+      <ConfirmDialog
+        open={confirmClearHistory}
+        title="Clear version history?"
+        message="The original extraction is kept; intermediate checkpoints are removed."
+        confirmLabel="Clear"
+        onConfirm={() => { clearHistory(); setConfirmClearHistory(false) }}
+        onCancel={() => setConfirmClearHistory(false)}
+      />
     </div>
   )
 }

@@ -20,6 +20,12 @@ export default {
           DEFAULT: 'hsl(var(--destructive))',
           foreground: 'hsl(var(--destructive-foreground))',
         },
+        success: {
+          DEFAULT: 'hsl(var(--success))',
+          foreground: 'hsl(var(--success-foreground))',
+          bg: 'hsl(var(--success-bg))',
+        },
+        placeholder: 'hsl(var(--placeholder))',
         // kept for existing components (google.* → resolved to same CSS vars)
         google: {
           blue: 'hsl(var(--primary))',

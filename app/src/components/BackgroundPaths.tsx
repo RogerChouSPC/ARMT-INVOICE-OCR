@@ -1,7 +1,8 @@
 import { useMemo } from 'react'
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 
 function FloatingPaths({ position }: { position: number }) {
+  const reduceMotion = useReducedMotion()
   // useMemo so the array is never re-created on re-renders
   const paths = useMemo(() =>
     Array.from({ length: 24 }, (_, i) => ({
@@ -39,13 +40,13 @@ function FloatingPaths({ position }: { position: number }) {
             stroke="currentColor"
             strokeWidth={path.width}
             strokeOpacity={0.1 + path.id * 0.03}
-            initial={{ pathLength: 0.3, opacity: 0.6 }}
-            animate={{
+            initial={reduceMotion ? { pathLength: 1, opacity: 0.5 } : { pathLength: 0.3, opacity: 0.6 }}
+            animate={reduceMotion ? { pathLength: 1, opacity: 0.5 } : {
               pathLength: 1,
               opacity: [0.3, 0.6, 0.3],
               pathOffset: [0, 1, 0],
             }}
-            transition={{
+            transition={reduceMotion ? undefined : {
               duration: path.duration,
               repeat: Infinity,
               ease: 'linear',

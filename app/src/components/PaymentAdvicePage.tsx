@@ -134,9 +134,12 @@ export default function PaymentAdvicePage() {
                       <td className="px-3 py-2 text-right tabular-nums">{baht(s.f.transferred_amount)}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{baht(s.calc)}</td>
                       <td className="px-3 py-2 text-center">
-                        <span className={`inline-block rounded px-2 py-0.5 text-xs font-semibold ${
-                          s.match ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                        }`}>
+                        <span
+                          className="inline-block rounded px-2 py-0.5 text-xs font-semibold"
+                          style={s.match
+                            ? { backgroundColor: 'hsl(var(--success-bg))', color: 'hsl(var(--success))' }
+                            : { backgroundColor: 'hsl(var(--destructive) / 0.15)', color: 'hsl(var(--destructive))' }}
+                        >
                           {s.match ? '✓ Match' : '✗ Mismatch'}
                         </span>
                       </td>
@@ -171,9 +174,13 @@ export default function PaymentAdvicePage() {
                         <td className="px-3 py-2 text-right tabular-nums">{baht(calc)}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{baht(st.pdf_total_transfer)}</td>
                         <td className="px-3 py-2 text-center">
-                          <span className={`inline-block rounded px-2 py-0.5 text-xs font-semibold ${
-                            match ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                          }`}>
+                          <span
+                            className="inline-block rounded px-2 py-0.5 text-xs font-semibold"
+                            style={match
+                              ? { backgroundColor: 'hsl(var(--success-bg))', color: 'hsl(var(--success))' }
+                              : { backgroundColor: 'hsl(var(--destructive) / 0.15)', color: 'hsl(var(--destructive))' }}
+                            title={match ? 'Match' : 'Mismatch'}
+                          >
                             {match ? '✓' : '✗'}
                           </span>
                         </td>

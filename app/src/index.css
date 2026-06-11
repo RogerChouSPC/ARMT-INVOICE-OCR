@@ -15,6 +15,10 @@
     --border:                 215 20% 90%;
     --destructive:            0 84% 58%;
     --destructive-foreground: 0 0% 100%;
+    --success:                142 72% 27%;
+    --success-foreground:     0 0% 100%;
+    --success-bg:             142 60% 92%;
+    --placeholder:            215 16% 47%;
   }
 
   .dark {
@@ -27,6 +31,10 @@
     --border:                 217 25% 18%;
     --destructive:            0 62% 50%;
     --destructive-foreground: 0 0% 100%;
+    --success:                142 60% 60%;
+    --success-foreground:     0 0% 0%;
+    --success-bg:             142 50% 14%;
+    --placeholder:            216 12% 54%;
   }
 
   html {
@@ -92,4 +100,14 @@
 .table-container thead th {
   position: sticky; top: 0; z-index: 10;
   background-color: hsl(var(--muted));
+}
+
+/* Respect users who prefer reduced motion: neutralise animations/transitions globally. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

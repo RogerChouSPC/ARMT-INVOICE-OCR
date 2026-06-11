@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import * as XLSX from 'xlsx'
 import { CUSTOMER_MASTER_SEED } from '@/config/customerMasterSeed'
+import ConfirmDialog from '@/components/ConfirmDialog'
 
 export interface CustomerRow {
   id: string
@@ -104,6 +105,8 @@ export default function CustomerMasterPage() {
   const [highlightedRows, setHighlightedRows] = useState<Set<string>>(new Set())
   const [highlightedCells, setHighlightedCells] = useState<Set<string>>(new Set())
   const [toast, setToast]       = useState<{ msg: string; ok: boolean } | null>(null)
+  const [confirmDeleteRow, setConfirmDeleteRow] = useState<number | null>(null)
+  const [confirmClearHistory, setConfirmClearHistory] = useState(false)
   const importRef = useRef<HTMLInputElement>(null)
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -404,7 +407,7 @@ export default function CustomerMasterPage() {
                   <tr key={row.id} className={`border-b border-border transition-colors duration-700 group ${
                     highlightedRows.has(row.id) ? 'bg-amber-50 dark:bg-amber-950/30' : 'hover:bg-muted/40'
                   }`}>
-                    <td className="px-2 py-1 text-center text-muted-foreground/60">{ri + 1}</td>
+                    <td className="px-2 py-1 text-center text-muted-foreground">{ri + 1}</td>
                     {COLS.map(c => {
                       const isEditing  = editCell?.row === ri && editCell?.col === c.key
                       const isDirty    = dirtyCells.has(`${row.id}:${String(c.key)}`)
@@ -435,7 +438,7 @@ export default function CustomerMasterPage() {
                             />
                           ) : (
                             <span
-                              className={`block truncate px-1 py-0.5 rounded ${val ? 'text-foreground' : 'text-muted-foreground/40 italic'}`}
+                              className={`block truncate px-1 py-0.5 rounded ${val ? 'text-foreground' : 'text-placeholder italic'}`}
                               style={{ maxWidth: c.width - 16 }}
                               title={val}
                             >
@@ -447,8 +450,10 @@ export default function CustomerMasterPage() {
                     })}
                     <td className="px-2 py-1 text-center">
                       <button
-                        onClick={() => deleteRow(ri)}
-                        className="w-5 h-5 rounded text-muted-foreground/30 hover:text-destructive hover:bg-destructive/10 transition-colors opacity-0 group-hover:opacity-100 flex items-center justify-center"
+                        type="button"
+                        aria-label={`Delete row ${ri + 1}`}
+                        onClick={() => setConfirmDeleteRow(ri)}
+                        className="w-5 h-5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary flex items-center justify-center"
                         title="Delete row"
                       >
                         <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" /></svg>
@@ -484,7 +489,7 @@ export default function CustomerMasterPage() {
                   Default
                 </button>
                 <button
-                  onClick={() => { setHistory([]); localStorage.removeItem(LS_HISTORY) }}
+                  onClick={() => setConfirmClearHistory(true)}
                   title="Clear all history"
                   className="text-[11px] px-2 py-1 rounded-full border border-border text-muted-foreground hover:text-destructive hover:border-destructive transition-colors"
                 >
@@ -571,6 +576,27 @@ export default function CustomerMasterPage() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmDeleteRow !== null}
+        title="Delete this customer?"
+        message="The row is removed from the working table. Use Save to persist, or History to restore."
+        confirmLabel="Delete"
+        onConfirm={() => {
+          if (confirmDeleteRow !== null) deleteRow(confirmDeleteRow)
+          setConfirmDeleteRow(null)
+        }}
+        onCancel={() => setConfirmDeleteRow(null)}
+      />
+
+      <ConfirmDialog
+        open={confirmClearHistory}
+        title="Clear all version history?"
+        message="This permanently removes saved versions. Current data is not affected."
+        confirmLabel="Clear"
+        onConfirm={() => { setHistory([]); localStorage.removeItem(LS_HISTORY); setConfirmClearHistory(false) }}
+        onCancel={() => setConfirmClearHistory(false)}
+      />
 
       {/* ── Toast ──────────────────────────────────────────────────────────── */}
       {toast && (

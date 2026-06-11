@@ -79,12 +79,12 @@ export default function LoginPage({ initError, isLoading }: Props) {
             </p>
           )}
 
-          <p className="text-xs text-muted-foreground/70 text-center">
+          <p className="text-xs text-muted-foreground text-center">
             Authorised company accounts only.
           </p>
         </div>
 
-        <p className="text-center text-xs text-muted-foreground/50 mt-8">
+        <p className="text-center text-xs text-muted-foreground mt-8">
           ARMT Invoice OCR · Internal tool
         </p>
 
@@ -95,7 +95,7 @@ export default function LoginPage({ initError, isLoading }: Props) {
               sessionStorage.clear()
               window.location.reload()
             }}
-            className="text-xs text-muted-foreground/50 hover:text-muted-foreground underline underline-offset-2"
+            className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
           >
             Trouble signing in? Clear session
           </button>
