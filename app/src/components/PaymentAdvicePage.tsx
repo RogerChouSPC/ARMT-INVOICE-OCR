@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { useAuth } from '@/auth/AuthProvider'
+import { useT } from '@/i18n/LanguageProvider'
 import { useBeforeUnload } from '@/hooks/useBeforeUnload'
 import UploadZone from '@/components/UploadZone'
 import { exportPaymentAdviceExcel } from '@/utils/paymentAdviceExcel'
@@ -26,6 +27,7 @@ interface FileSummary {
 
 export default function PaymentAdvicePage() {
   const { getToken } = useAuth()
+  const { t } = useT()
   const [files, setFiles] = useState<PaymentAdviceFile[]>([])
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -75,10 +77,10 @@ export default function PaymentAdvicePage() {
       {!hasResults && !processing && (
         <div className="text-center pt-16 pb-2 animate-fade-in">
           <h2 className="text-4xl font-bold text-foreground tracking-tight leading-[1.2]">
-            Makro Invoice Extract
+            {t('pa.title')}
           </h2>
           <p className="text-muted-foreground mt-3">
-            Upload CP Axtra (Makro) Payment Advice PDFs → reconcile invoices against the bank transfer → download Excel.
+            {t('pa.subtitle')}
           </p>
         </div>
       )}
@@ -88,7 +90,7 @@ export default function PaymentAdvicePage() {
 
         {processing && (
           <div className="text-center text-sm text-muted-foreground animate-pulse py-4">
-            Reading PDF(s) and reconciling…
+            {t('pa.reconciling')}
           </div>
         )}
 
@@ -102,13 +104,13 @@ export default function PaymentAdvicePage() {
           <>
             <div className="flex items-center justify-between pt-2 animate-fade-in">
               <span className="text-sm text-muted-foreground">
-                {files.length} file(s) · {totalStores} site(s) · {summaries.reduce((s, x) => s + x.invoices, 0)} invoices
+                {t('pa.summary', { files: files.length, sites: totalStores, invoices: summaries.reduce((s, x) => s + x.invoices, 0) })}
               </span>
               <button className="btn-primary" onClick={() => exportPaymentAdviceExcel(files)}>
                 <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
                   <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
                 </svg>
-                Download Excel
+                {t('pa.downloadExcel')}
               </button>
             </div>
 
@@ -117,12 +119,12 @@ export default function PaymentAdvicePage() {
               <table className="w-full text-sm">
                 <thead className="bg-muted/50 text-muted-foreground">
                   <tr>
-                    <th className="text-left px-3 py-2 font-medium">Filename</th>
-                    <th className="text-left px-3 py-2 font-medium">Reference</th>
-                    <th className="text-left px-3 py-2 font-medium">Value Date</th>
-                    <th className="text-right px-3 py-2 font-medium">Bank Total</th>
-                    <th className="text-right px-3 py-2 font-medium">Calc Total</th>
-                    <th className="text-center px-3 py-2 font-medium">Match</th>
+                    <th className="text-left px-3 py-2 font-medium">{t('pa.col.filename')}</th>
+                    <th className="text-left px-3 py-2 font-medium">{t('pa.col.reference')}</th>
+                    <th className="text-left px-3 py-2 font-medium">{t('pa.col.valueDate')}</th>
+                    <th className="text-right px-3 py-2 font-medium">{t('pa.col.bankTotal')}</th>
+                    <th className="text-right px-3 py-2 font-medium">{t('pa.col.calcTotal')}</th>
+                    <th className="text-center px-3 py-2 font-medium">{t('pa.col.match')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -140,7 +142,7 @@ export default function PaymentAdvicePage() {
                             ? { backgroundColor: 'hsl(var(--success-bg))', color: 'hsl(var(--success))' }
                             : { backgroundColor: 'hsl(var(--destructive) / 0.15)', color: 'hsl(var(--destructive))' }}
                         >
-                          {s.match ? '✓ Match' : '✗ Mismatch'}
+                          {s.match ? `✓ ${t('pa.match')}` : `✗ ${t('pa.mismatch')}`}
                         </span>
                       </td>
                     </tr>
@@ -154,12 +156,12 @@ export default function PaymentAdvicePage() {
               <table className="w-full text-sm">
                 <thead className="bg-muted/50 text-muted-foreground">
                   <tr>
-                    <th className="text-left px-3 py-2 font-medium">Payee</th>
-                    <th className="text-left px-3 py-2 font-medium">Site</th>
-                    <th className="text-right px-3 py-2 font-medium">Invoices</th>
-                    <th className="text-right px-3 py-2 font-medium">Calc Transfer</th>
-                    <th className="text-right px-3 py-2 font-medium">PDF Total</th>
-                    <th className="text-center px-3 py-2 font-medium">Match</th>
+                    <th className="text-left px-3 py-2 font-medium">{t('pa.col.payee')}</th>
+                    <th className="text-left px-3 py-2 font-medium">{t('pa.col.site')}</th>
+                    <th className="text-right px-3 py-2 font-medium">{t('pa.col.invoices')}</th>
+                    <th className="text-right px-3 py-2 font-medium">{t('pa.col.calcTransfer')}</th>
+                    <th className="text-right px-3 py-2 font-medium">{t('pa.col.pdfTotal')}</th>
+                    <th className="text-center px-3 py-2 font-medium">{t('pa.col.match')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -179,7 +181,7 @@ export default function PaymentAdvicePage() {
                             style={match
                               ? { backgroundColor: 'hsl(var(--success-bg))', color: 'hsl(var(--success))' }
                               : { backgroundColor: 'hsl(var(--destructive) / 0.15)', color: 'hsl(var(--destructive))' }}
-                            title={match ? 'Match' : 'Mismatch'}
+                            title={match ? t('pa.match') : t('pa.mismatch')}
                           >
                             {match ? '✓' : '✗'}
                           </span>

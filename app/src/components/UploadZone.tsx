@@ -1,4 +1,5 @@
 import { useRef, useState, useCallback } from 'react'
+import { useT } from '@/i18n/LanguageProvider'
 
 interface UploadZoneProps {
   onFiles: (files: File[]) => void
@@ -39,6 +40,7 @@ async function collectPdfsFromItems(items: DataTransferItemList): Promise<File[]
 }
 
 export default function UploadZone({ onFiles, disabled }: UploadZoneProps) {
+  const { t } = useT()
   const fileRef   = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
 
@@ -89,14 +91,14 @@ export default function UploadZone({ onFiles, disabled }: UploadZoneProps) {
 
       <div className="text-center">
         <p className="text-base font-semibold text-foreground">
-          {dragging ? 'Drop PDFs or folders here' : 'Upload invoice PDFs'}
+          {dragging ? t('upload.dropHere') : t('upload.title')}
         </p>
         <p className="text-sm text-muted-foreground mt-1">
-          Drag & drop or{' '}
-          <span className="text-primary font-medium">browse files</span>
+          {t('upload.dragDrop')}{' '}
+          <span className="text-primary font-medium">{t('upload.browseFiles')}</span>
           {' · '}
           <label className="text-primary font-medium cursor-pointer hover:underline" onClick={e => e.stopPropagation()}>
-            browse folder
+            {t('upload.browseFolder')}
             <input
               type="file"
               multiple

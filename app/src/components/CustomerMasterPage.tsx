@@ -3,6 +3,8 @@ import * as XLSX from 'xlsx'
 import { CUSTOMER_MASTER_SEED } from '@/config/customerMasterSeed'
 import ConfirmDialog from '@/components/ConfirmDialog'
 import { useGridNavigation } from '@/hooks/useGridNavigation'
+import { useT } from '@/i18n/LanguageProvider'
+import type { TKey } from '@/i18n/dictionary'
 
 export interface CustomerRow {
   id: string
@@ -80,19 +82,20 @@ export function getCustomerMasterRows(): CustomerRow[] {
   return lsGetRows() || seedWithIds()
 }
 
-const COLS: { key: keyof CustomerRow; label: string; width: number }[] = [
-  { key: 'store_name',    label: 'ชื่อร้านค้า',      width: 220 },
-  { key: 'customergroup', label: 'customergroup',     width: 260 },
-  { key: 'customercode',  label: 'customercode',      width: 380 },
-  { key: 'taxid',         label: 'taxid',             width: 150 },
+const COLS: { key: keyof CustomerRow; labelKey: TKey; width: number }[] = [
+  { key: 'store_name',    labelKey: 'cm.col.storeName',     width: 220 },
+  { key: 'customergroup', labelKey: 'cm.col.customergroup', width: 260 },
+  { key: 'customercode',  labelKey: 'cm.col.customercode',  width: 380 },
+  { key: 'taxid',         labelKey: 'cm.col.taxid',         width: 150 },
 ]
 
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })
+function fmtDate(iso: string, lang: string) {
+  return new Date(iso).toLocaleString(lang === 'th' ? 'th-TH' : 'en-GB', { dateStyle: 'short', timeStyle: 'short' })
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function CustomerMasterPage() {
+  const { t, lang } = useT()
   const [rows, setRows]         = useState<CustomerRow[]>([])
   const [history, setHistory]   = useState<Version[]>([])
   const [loading, setLoading]   = useState(true)
@@ -164,13 +167,13 @@ export default function CustomerMasterPage() {
       setHistory(newHistory)
       setDirty(false)
       setDirtyCells(new Set())
-      showToast('Saved successfully')
+      showToast(t('cm.toast.saved'))
     } catch (e) {
-      showToast((e as Error).message || 'Save failed', false)
+      showToast((e as Error).message || t('cm.toast.saveFailed'), false)
     } finally {
       setSaving(false)
     }
-  }, [rows, editCell, editValue, history])
+  }, [rows, editCell, editValue, history, t])
 
   // ── restore to factory default (SEED data) ───────────────────────────────
   const restoreToDefault = useCallback(() => {
@@ -194,8 +197,8 @@ export default function CustomerMasterPage() {
     setHistory(newHistory)
     setDirty(false)
     setDirtyCells(new Set())
-    showToast(`Restored to default (${seedRows.length} rows)`)
-  }, [history])
+    showToast(t('cm.toast.restoredDefault', { n: seedRows.length }))
+  }, [history, t])
 
   // ── restore from version ──────────────────────────────────────────────────
   const restore = useCallback((id: string) => {
@@ -203,7 +206,7 @@ export default function CustomerMasterPage() {
     if (!version) return
 
     if (!version.snapshot || version.snapshot.length === 0) {
-      showToast('Cannot restore: this version has no data snapshot', false)
+      showToast(t('cm.toast.noSnapshot'), false)
       return
     }
 
@@ -233,13 +236,13 @@ export default function CustomerMasterPage() {
     setRows(version.snapshot)
     setDirty(false)
     setDirtyCells(new Set())
-    showToast(`Restored: ${version.snapshot.length} rows`)
+    showToast(t('cm.toast.restored', { n: version.snapshot.length }))
     if (highlightTimer.current) clearTimeout(highlightTimer.current)
     highlightTimer.current = setTimeout(() => {
       setHighlightedRows(new Set())
       setHighlightedCells(new Set())
     }, 3000)
-  }, [history, rows])
+  }, [history, rows, t])
 
   // ── cell edit ─────────────────────────────────────────────────────────────
   const startEdit = (rowIdx: number, col: keyof CustomerRow, initialChar?: string) => {
@@ -299,7 +302,7 @@ export default function CustomerMasterPage() {
         customercode:  String(r['customercode'] || '').trim(),
         taxid:         String(r['taxid'] || '').trim(),
       })).filter(r => r.store_name || r.taxid)
-      if (imported.length === 0) { showToast('No valid rows found in file', false); return }
+      if (imported.length === 0) { showToast(t('cm.toast.noValidRows'), false); return }
 
       // Auto-save with version entry
       const prevRows = lsGetRows() || []
@@ -320,7 +323,7 @@ export default function CustomerMasterPage() {
       setRows(imported)
       setHistory(newHistory)
       setDirty(false)
-      showToast(`Imported ${imported.length} rows`)
+      showToast(t('cm.toast.imported', { n: imported.length }))
     }
     reader.readAsBinaryString(file)
     e.target.value = ''
@@ -356,7 +359,7 @@ export default function CustomerMasterPage() {
         <svg viewBox="0 0 24 24" className="w-5 h-5 fill-primary animate-spin-slow mr-2">
           <path d="M12 4V2C6.48 2 2 6.48 2 12h2c0-4.42 3.58-8 8-8z" />
         </svg>
-        Loading…
+        {t('cm.loading')}
       </div>
     )
   }
@@ -367,25 +370,25 @@ export default function CustomerMasterPage() {
       {/* ── Toolbar ────────────────────────────────────────────────────────── */}
       <div className="card px-5 py-3 flex items-center gap-3 flex-wrap">
         <span className="text-sm font-medium text-foreground mr-auto">
-          Customer Master
-          <span className="ml-2 text-xs text-muted-foreground font-normal">{rows.length} rows</span>
-          {dirty && <span className="ml-2 text-xs text-primary font-normal">● unsaved</span>}
+          {t('cm.title')}
+          <span className="ml-2 text-xs text-muted-foreground font-normal">{t('cm.rows', { n: rows.length })}</span>
+          {dirty && <span className="ml-2 text-xs text-primary font-normal">{t('cm.unsaved')}</span>}
         </span>
 
         <label className="btn-secondary cursor-pointer text-xs">
           <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" /></svg>
-          Import Excel
+          {t('cm.importExcel')}
           <input ref={importRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={importExcel} />
         </label>
 
         <button className="btn-secondary text-xs" onClick={exportExcel}>
           <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" /></svg>
-          Export Excel
+          {t('cm.exportExcel')}
         </button>
 
         <button className="btn-secondary text-xs" onClick={() => setShowHistory(v => !v)}>
           <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current"><path d="M13 3a9 9 0 1 0 9 9h-2a7 7 0 1 1-7-7v4l5-5-5-5v4z" /></svg>
-          History {history.length > 0 && <span className="ml-1 bg-primary text-primary-foreground rounded-full px-1.5 py-0 text-[10px]">{history.length}</span>}
+          {t('cm.history')} {history.length > 0 && <span className="ml-1 bg-primary text-primary-foreground rounded-full px-1.5 py-0 text-[10px]">{history.length}</span>}
         </button>
 
         <button className="btn-primary text-xs" onClick={save} disabled={saving || !dirty}>
@@ -393,7 +396,7 @@ export default function CustomerMasterPage() {
             ? <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current animate-spin-slow"><path d="M12 4V2C6.48 2 2 6.48 2 12h2c0-4.42 3.58-8 8-8z" /></svg>
             : <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current"><path d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z" /></svg>
           }
-          {saving ? 'Saving…' : 'Save'}
+          {saving ? t('cm.saving') : t('cm.save')}
         </button>
       </div>
 
@@ -426,7 +429,7 @@ export default function CustomerMasterPage() {
                         }`}
                         style={{ minWidth: c.width, ...(frozen ? { left: 32, zIndex: 30 } : null) }}
                       >
-                        {c.label}
+                        {t(c.labelKey)}
                       </th>
                     )
                   })}
@@ -509,7 +512,7 @@ export default function CustomerMasterPage() {
           <div className="px-4 py-2.5 border-t border-border">
             <button className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/70 transition-colors" onClick={addRow}>
               <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" /></svg>
-              Add row
+              {t('cm.addRow')}
             </button>
           </div>
         </div>
@@ -518,24 +521,24 @@ export default function CustomerMasterPage() {
         {showHistory && (
           <div className="card w-80 shrink-0 flex flex-col animate-slide-up">
             <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-2">
-              <span className="text-sm font-medium text-foreground">Version History</span>
+              <span className="text-sm font-medium text-foreground">{t('cm.versionHistory')}</span>
               <div className="flex items-center gap-2">
                 <button
                   onClick={restoreToDefault}
-                  title="Restore to original default data"
+                  title={t('cm.defaultTip')}
                   className="flex items-center gap-1 text-[11px] px-2 py-1 rounded-full border border-border text-muted-foreground hover:text-primary hover:border-primary transition-colors"
                 >
                   <svg viewBox="0 0 24 24" className="w-3 h-3 fill-current">
                     <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
                   </svg>
-                  Default
+                  {t('cm.default')}
                 </button>
                 <button
                   onClick={() => setConfirmClearHistory(true)}
-                  title="Clear all history"
+                  title={t('cm.clearTip')}
                   className="text-[11px] px-2 py-1 rounded-full border border-border text-muted-foreground hover:text-destructive hover:border-destructive transition-colors"
                 >
-                  Clear
+                  {t('cm.clear')}
                 </button>
                 <button onClick={() => setShowHistory(false)} className="text-muted-foreground hover:text-foreground">
                   <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" /></svg>
@@ -543,7 +546,7 @@ export default function CustomerMasterPage() {
               </div>
             </div>
             {history.length === 0 ? (
-              <p className="px-4 py-6 text-xs text-muted-foreground text-center">No saved versions yet</p>
+              <p className="px-4 py-6 text-xs text-muted-foreground text-center">{t('cm.noVersions')}</p>
             ) : (
               <div className="overflow-y-auto max-h-[calc(100vh-280px)]">
                 {history.map(v => (
@@ -557,11 +560,11 @@ export default function CustomerMasterPage() {
                         title={v.snapshot?.length > 0 ? `Restore to this version (${v.snapshot.length} rows)` : 'No snapshot available'}
                       >
                         <div className="text-xs font-medium text-foreground truncate">{v.label}</div>
-                        <div className="text-[11px] text-muted-foreground mt-0.5">{fmtDate(v.timestamp)}</div>
+                        <div className="text-[11px] text-muted-foreground mt-0.5">{fmtDate(v.timestamp, lang)}</div>
                         <div className="flex gap-1.5 mt-1.5 flex-wrap">
                           {v.snapshot?.length > 0 && (
                             <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">
-                              {v.snapshot.length} rows
+                              {t('cm.rows', { n: v.snapshot.length })}
                             </span>
                           )}
                           {v.added > 0 && (
@@ -621,9 +624,10 @@ export default function CustomerMasterPage() {
 
       <ConfirmDialog
         open={confirmDeleteRow !== null}
-        title="Delete this customer?"
-        message="The row is removed from the working table. Use Save to persist, or History to restore."
-        confirmLabel="Delete"
+        title={t('confirm.deleteCustomer.title')}
+        message={t('confirm.deleteCustomer.message')}
+        confirmLabel={t('confirm.delete')}
+        cancelLabel={t('confirm.cancel')}
         onConfirm={() => {
           if (confirmDeleteRow !== null) deleteRow(confirmDeleteRow)
           setConfirmDeleteRow(null)
@@ -633,9 +637,10 @@ export default function CustomerMasterPage() {
 
       <ConfirmDialog
         open={confirmClearHistory}
-        title="Clear all version history?"
-        message="This permanently removes saved versions. Current data is not affected."
-        confirmLabel="Clear"
+        title={t('confirm.clearAllHistory.title')}
+        message={t('confirm.clearAllHistory.message')}
+        confirmLabel={t('confirm.clear')}
+        cancelLabel={t('confirm.cancel')}
         onConfirm={() => { setHistory([]); localStorage.removeItem(LS_HISTORY); setConfirmClearHistory(false) }}
         onCancel={() => setConfirmClearHistory(false)}
       />

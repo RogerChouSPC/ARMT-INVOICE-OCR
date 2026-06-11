@@ -1,14 +1,16 @@
 import { useState } from 'react'
 import type { FileProcessingStatus } from '@/types/invoice'
 import PdfPreviewDialog from './PdfPreviewDialog'
+import { useT } from '@/i18n/LanguageProvider'
+import type { TKey } from '@/i18n/dictionary'
 
-const STATE_LABELS: Record<string, string> = {
-  idle:       'Waiting',
-  rendering:  'Rendering pages…',
-  ocr:        'Running OCR…',
-  extracting: 'Extracting fields…',
-  done:       'Done',
-  error:      'Error',
+const STATE_LABEL_KEYS: Record<string, TKey> = {
+  idle:       'status.state.idle',
+  rendering:  'status.state.rendering',
+  ocr:        'status.state.ocr',
+  extracting: 'status.state.extracting',
+  done:       'status.state.done',
+  error:      'status.state.error',
 }
 
 const STATE_COLORS: Record<string, string> = {
@@ -29,6 +31,7 @@ interface Props {
 }
 
 export default function ProcessingStatus({ items, pageStats }: Props) {
+  const { t } = useT()
   const [previewFile, setPreviewFile] = useState<File | null>(null)
 
   if (items.length === 0) return null
@@ -37,7 +40,7 @@ export default function ProcessingStatus({ items, pageStats }: Props) {
     <>
       <div className="card p-5 animate-slide-up">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold text-foreground">Processing</h2>
+          <h2 className="text-sm font-semibold text-foreground">{t('status.heading')}</h2>
           {pageStats.total > 0 && (
             <span className="text-sm font-semibold text-primary tabular-nums">
               {pageStats.done}/{pageStats.total}
@@ -58,7 +61,7 @@ export default function ProcessingStatus({ items, pageStats }: Props) {
                 <div className="flex items-center gap-2 shrink-0 ml-3">
                   <button
                     onClick={() => setPreviewFile(item.file)}
-                    title="Preview PDF"
+                    title={t('status.previewPdf')}
                     className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                   >
                     <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
@@ -82,7 +85,7 @@ export default function ProcessingStatus({ items, pageStats }: Props) {
                     item.state === 'error' ? 'text-destructive' :
                     item.state === 'done'  ? 'text-green-600'   : 'text-primary'
                   }`}>
-                    {STATE_LABELS[item.state]}
+                    {t(STATE_LABEL_KEYS[item.state])}
                   </span>
                 </div>
               </div>
@@ -101,7 +104,7 @@ export default function ProcessingStatus({ items, pageStats }: Props) {
                   {item.error}
                   {item.error.toLowerCase().includes('quota') && (
                     <span className="block text-muted-foreground mt-0.5">
-                      Fix: enable billing at{' '}
+                      {t('status.quotaFix')}{' '}
                       <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-primary underline">
                         aistudio.google.com
                       </a>

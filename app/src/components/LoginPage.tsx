@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '@/auth/AuthProvider'
+import { useT } from '@/i18n/LanguageProvider'
 
 interface Props {
   initError?: string | null
@@ -8,6 +9,7 @@ interface Props {
 
 export default function LoginPage({ initError, isLoading }: Props) {
   const { login } = useAuth()
+  const { t } = useT()
   const [signing, setSigning] = useState(false)
   const [error, setError]     = useState<string | null>(null)
 
@@ -37,7 +39,7 @@ export default function LoginPage({ initError, isLoading }: Props) {
             </svg>
           </div>
           <h1 className="text-3xl font-bold text-foreground tracking-tight">SPC OCR</h1>
-          <p className="text-base text-muted-foreground mt-2">Thai invoices to Excel, automatically.</p>
+          <p className="text-base text-muted-foreground mt-2">{t('login.tagline')}</p>
         </div>
 
         <div className="border border-border rounded-2xl p-8 flex flex-col gap-5 shadow-card">
@@ -45,7 +47,7 @@ export default function LoginPage({ initError, isLoading }: Props) {
           {isLoading && !displayError && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <div className="h-4 w-4 rounded-full border-2 border-muted-foreground border-t-transparent animate-spin flex-shrink-0" />
-              Checking session…
+              {t('login.checkingSession')}
             </div>
           )}
 
@@ -70,22 +72,22 @@ export default function LoginPage({ initError, isLoading }: Props) {
                 <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
               </svg>
             )}
-            {signing ? 'Redirecting to Microsoft…' : isLoading ? 'Please wait…' : 'Sign in with Microsoft 365'}
+            {signing ? t('login.redirecting') : isLoading ? t('login.pleaseWait') : t('login.signIn')}
           </button>
 
           {signing && (
             <p className="text-xs text-muted-foreground text-center">
-              You will be redirected to Microsoft and back automatically.
+              {t('login.redirectNote')}
             </p>
           )}
 
           <p className="text-xs text-muted-foreground text-center">
-            Authorised company accounts only.
+            {t('login.authorisedOnly')}
           </p>
         </div>
 
         <p className="text-center text-xs text-muted-foreground mt-8">
-          ARMT Invoice OCR · Internal tool
+          {t('login.footer')}
         </p>
 
         <p className="text-center mt-3">
@@ -97,7 +99,7 @@ export default function LoginPage({ initError, isLoading }: Props) {
             }}
             className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
           >
-            Trouble signing in? Clear session
+            {t('login.troubleSignIn')}
           </button>
         </p>
 

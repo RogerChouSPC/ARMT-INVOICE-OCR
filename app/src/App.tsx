@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { useAuth } from '@/auth/AuthProvider'
+import { useT } from '@/i18n/LanguageProvider'
 import LoginPage from '@/components/LoginPage'
 import Header from '@/components/Header'
 import UploadZone from '@/components/UploadZone'
@@ -33,6 +34,7 @@ function fileToBase64(file: File): Promise<string> {
 
 export default function App() {
   const { user, loading, error, logout, getToken } = useAuth()
+  const { t } = useT()
   const [activeTab, setActiveTab]       = useState<Tab>('ocr')
   const [liveEnabled, setLiveEnabled]   = useState(() => localStorage.getItem('live') !== 'off')
   const [statuses, setStatuses]         = useState<FileProcessingStatus[]>([])
@@ -215,8 +217,8 @@ export default function App() {
           {rows.length === 0 && statuses.length === 0 && (
             <div className="text-center pt-16 pb-4 animate-fade-in">
               <h2 className="text-3xl sm:text-4xl font-bold text-foreground tracking-tight leading-tight text-balance">
-                Extract invoices in seconds<br />
-                Supported for
+                {t('app.hero.title')}<br />
+                {t('app.hero.supportedFor')}
               </h2>
               <CustomerCycle />
             </div>
@@ -225,13 +227,13 @@ export default function App() {
           <div className={`max-w-3xl mx-auto w-full flex flex-col gap-6 ${(statuses.length > 0 || rows.length > 0) ? 'pt-8' : ''}`}>
             {rows.length > 0 && (
               <div className="pt-8 pb-2 flex items-center justify-between animate-fade-in">
-                <span className="text-sm text-muted-foreground">{rows.length} {rows.length === 1 ? 'row' : 'rows'} extracted</span>
+                <span className="text-sm text-muted-foreground">{rows.length === 1 ? t('app.rowsExtracted.one') : t('app.rowsExtracted.many', { n: rows.length })}</span>
                 {allDone && !isProcessing && (
                   <label className="btn-secondary cursor-pointer">
                     <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
                       <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
                     </svg>
-                    Add more
+                    {t('app.addMore')}
                     <input type="file" accept="application/pdf" multiple className="hidden"
                       onChange={(e) => e.target.files && processFiles(Array.from(e.target.files))} />
                   </label>
@@ -253,7 +255,7 @@ export default function App() {
                     className="text-sm text-muted-foreground hover:text-destructive transition-colors"
                     onClick={clearAll}
                   >
-                    Clear all
+                    {t('app.clearAll')}
                   </button>
 
                   <div className="flex items-center gap-3">
@@ -261,13 +263,13 @@ export default function App() {
                       <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
                         <path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
                       </svg>
-                      Refresh Mapping
+                      {t('app.refreshMapping')}
                     </button>
                     <button className="btn-primary" onClick={() => exportToExcel(rows)} disabled={rows.length === 0}>
                       <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current">
                         <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
                       </svg>
-                      Download Excel
+                      {t('app.downloadExcel')}
                     </button>
                   </div>
                 </div>

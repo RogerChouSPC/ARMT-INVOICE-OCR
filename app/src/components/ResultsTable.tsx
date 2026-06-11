@@ -3,6 +3,7 @@ import type { InvoiceRow } from '@/types/invoice'
 import { INVOICE_COLUMNS } from '@/types/invoice'
 import ConfirmDialog from '@/components/ConfirmDialog'
 import { useGridNavigation } from '@/hooks/useGridNavigation'
+import { useT, useColumnLabel } from '@/i18n/LanguageProvider'
 
 // ── Frozen leading columns ──────────────────────────────────────────────────
 // We pin the row-action column + the first two identity columns (seq,
@@ -45,6 +46,8 @@ interface Props {
 }
 
 export default function ResultsTable({ rows, onUpdate }: Props) {
+  const { t } = useT()
+  const colLabel = useColumnLabel()
   const [editCell, setEditCell] = useState<{ row: number; col: keyof InvoiceRow } | null>(null)
   const [fullscreen, setFullscreen] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
@@ -181,17 +184,17 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
       {/* Header */}
       <div className="px-5 py-4 border-b border-border flex items-center justify-between shrink-0">
         <h2 className="text-sm font-medium text-foreground">
-          Extracted Data
-          <span className="ml-2 text-xs text-muted-foreground font-normal">— click any cell to edit</span>
+          {t('results.title')}
+          <span className="ml-2 text-xs text-muted-foreground font-normal">{t('results.editHint')}</span>
         </h2>
         <div className="flex items-center gap-3">
-          <span className="text-xs text-muted-foreground">{rows.length} rows · 22 columns</span>
+          <span className="text-xs text-muted-foreground">{t('results.summary', { rows: rows.length })}</span>
 
           {/* Version history toggle */}
           {history.length > 0 && (
             <button
               onClick={() => setShowHistory(v => !v)}
-              title="Version history"
+              title={t('results.versionHistory')}
               className={`p-1.5 rounded hover:bg-muted transition-colors flex items-center gap-1 ${
                 showHistory ? 'text-primary bg-muted/60' : 'text-muted-foreground hover:text-foreground'
               }`}
@@ -206,7 +209,7 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
           {/* Fullscreen toggle */}
           <button
             onClick={() => setFullscreen(v => !v)}
-            title={fullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen'}
+            title={fullscreen ? t('results.exitFullscreen') : t('results.fullscreen')}
             className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
           >
             {fullscreen ? (
@@ -252,7 +255,7 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
                         ...(frozen ? { left: FROZEN_LEFTS[colIdx], zIndex: 30 } : null),
                       }}
                     >
-                      {col.label}
+                      {colLabel(col.key)}
                     </th>
                   )
                 })}
@@ -336,7 +339,7 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
                                   : 'text-foreground'
                             }`}
                             style={{ maxWidth: col.width - 12 }}
-                            title={MONEY_COLS.has(col.key) && isBadNumeric(value) ? 'ไม่ใช่ตัวเลข' : value}
+                            title={MONEY_COLS.has(col.key) && isBadNumeric(value) ? t('results.notANumber') : value}
                           >
                             {value || '—'}
                           </span>
@@ -354,20 +357,20 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
         {showHistory && (
           <div className={`w-48 shrink-0 border-l border-border overflow-y-auto bg-background flex flex-col ${fullscreen ? '' : 'max-h-[60vh]'}`}>
             <div className="px-3 py-2.5 border-b border-border flex items-center justify-between shrink-0">
-              <span className="text-xs font-semibold text-foreground">History</span>
+              <span className="text-xs font-semibold text-foreground">{t('results.history')}</span>
               <button
                 onClick={() => setConfirmClearHistory(true)}
                 className="text-xs text-muted-foreground hover:text-destructive transition-colors"
               >
-                Clear
+                {t('results.clear')}
               </button>
             </div>
 
             <div className="flex flex-col">
               {/* Current state — not clickable */}
               <div className="px-3 py-2.5 border-b border-border bg-primary/5">
-                <div className="text-xs font-bold text-primary">Current</div>
-                <div className="text-xs text-muted-foreground mt-0.5">{rows.length} rows</div>
+                <div className="text-xs font-bold text-primary">{t('results.current')}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">{t('results.rows', { n: rows.length })}</div>
               </div>
 
               {/* Past snapshots — newest first, each clickable to restore */}
@@ -380,9 +383,9 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
                     className="px-3 py-2.5 text-left border-b border-border hover:bg-muted transition-colors flex flex-col gap-0.5 w-full"
                   >
                     <span className="text-xs text-foreground">
-                      {isOriginal ? 'Original extraction' : fmt(snap.timestamp)}
+                      {isOriginal ? t('results.originalExtraction') : fmt(snap.timestamp)}
                     </span>
-                    <span className="text-xs text-muted-foreground">{snap.rows.length} rows</span>
+                    <span className="text-xs text-muted-foreground">{t('results.rows', { n: snap.rows.length })}</span>
                   </button>
                 )
               })}
@@ -393,9 +396,10 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
 
       <ConfirmDialog
         open={confirmDeleteRow !== null}
-        title="Delete this row?"
-        message="This removes the row from the extracted data. You can undo via version history."
-        confirmLabel="Delete"
+        title={t('confirm.deleteRow.title')}
+        message={t('confirm.deleteRow.message')}
+        confirmLabel={t('confirm.delete')}
+        cancelLabel={t('confirm.cancel')}
         onConfirm={() => {
           if (confirmDeleteRow !== null) deleteRow(confirmDeleteRow)
           setConfirmDeleteRow(null)
@@ -405,9 +409,10 @@ export default function ResultsTable({ rows, onUpdate }: Props) {
 
       <ConfirmDialog
         open={confirmClearHistory}
-        title="Clear version history?"
-        message="The original extraction is kept; intermediate checkpoints are removed."
-        confirmLabel="Clear"
+        title={t('confirm.clearHistory.title')}
+        message={t('confirm.clearHistory.message')}
+        confirmLabel={t('confirm.clear')}
+        cancelLabel={t('confirm.cancel')}
         onConfirm={() => { clearHistory(); setConfirmClearHistory(false) }}
         onCancel={() => setConfirmClearHistory(false)}
       />
