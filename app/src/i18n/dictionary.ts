@@ -123,7 +123,7 @@ export const th = {
 
   // Payment advice (Makro) page
   'pa.title': 'แยกข้อมูลใบแจ้งหนี้ Makro',
-  'pa.subtitle': 'อัปโหลดไฟล์ใบแจ้งการชำระเงิน (Payment Advice) ของ CP Axtra (Makro) → กระทบยอดใบแจ้งหนี้กับยอดโอนจากธนาคาร → ดาวน์โหลด Excel',
+  'pa.subtitle': 'อัปโหลดไฟล์ใบแจ้งการชำระเงิน (Payment Advice) ของ CP Axtra (Makro) → ดาวน์โหลด Excel',
   'pa.reconciling': 'กำลังอ่านไฟล์ PDF และกระทบยอด…',
   'pa.summary': '{files} ไฟล์ · {sites} สาขา · {invoices} ใบแจ้งหนี้',
   'pa.downloadExcel': 'ดาวน์โหลด Excel',
@@ -265,7 +265,7 @@ export const en: Record<TKey, string> = {
 
   // Payment advice (Makro) page
   'pa.title': 'Makro Invoice Extract',
-  'pa.subtitle': 'Upload CP Axtra (Makro) Payment Advice PDFs → reconcile invoices against the bank transfer → download Excel.',
+  'pa.subtitle': 'Upload CP Axtra (Makro) Payment Advice PDFs → download Excel.',
   'pa.reconciling': 'Reading PDF(s) and reconciling…',
   'pa.summary': '{files} file(s) · {sites} site(s) · {invoices} invoices',
   'pa.downloadExcel': 'Download Excel',

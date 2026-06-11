@@ -37,8 +37,8 @@ export default {
         },
       },
       fontFamily: {
-        sans:   ['Inter', 'system-ui', 'sans-serif'],
-        google: ['Inter', 'system-ui', 'sans-serif'],
+        sans:   ['Inter', 'IBM Plex Sans Thai', 'system-ui', 'sans-serif'],
+        google: ['Inter', 'IBM Plex Sans Thai', 'system-ui', 'sans-serif'],
       },
       boxShadow: {
         card: '0 1px 3px 0 rgba(60,64,67,.08), 0 4px 8px 3px rgba(60,64,67,.06)',

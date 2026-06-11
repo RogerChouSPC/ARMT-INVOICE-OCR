@@ -216,7 +216,7 @@ export default function App() {
 
           {rows.length === 0 && statuses.length === 0 && (
             <div className="text-center pt-16 pb-4 animate-fade-in">
-              <h2 className="text-3xl sm:text-4xl font-bold text-foreground tracking-tight leading-tight text-balance">
+              <h2 className="text-5xl sm:text-6xl font-bold text-foreground tracking-tight leading-[1.15] text-balance">
                 {t('app.hero.title')}<br />
                 {t('app.hero.supportedFor')}
               </h2>
