@@ -116,7 +116,12 @@ product_description = "" (this vendor has no product-detail line).`,
     extractMode: 'ocr',
     vendorCode: 'customer-line',
     vendorBranch: 'auto',
-    notes: 'vendor_customercode = the value next to the "Customer :" label (e.g. "S006-1"). Each line item has a VAT marker column next to the amount: "V" = VAT 7%, "N" = Non-VAT. When the marker is "V", put that line\'s VAT amount into vat_7. When "N", set vat_7 = "0".',
+    notes: `vendor_customercode = the value next to the "Customer :" label (e.g. "S006-1").
+description = the ENTIRE "Description" column, verbatim and complete (e.g. "SP7 Scan out"); join all lines if the cell wraps.
+product_description = "" (Boots has no separate product-detail column).
+vendor_expensecode = "" and vendor_expensegroup = "" (not used for Boots).
+Each line item has a VAT marker column next to the amount: "V" = VAT 7%, "N" = Non-VAT. When "V", put that line's VAT amount into vat_7; when "N", set vat_7 = "0".
+amount = the line "Amount" / "Total THB Excl. WHT". The server computes tax_3 (3%) and netamount.`,
   },
   {
     id: 'CJ',

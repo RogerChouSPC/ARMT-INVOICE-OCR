@@ -706,6 +706,11 @@ export function postProcessRows(rawRows: Record<string, unknown>[], opts: PostPr
       rows = rows.map((r) => ({ ...r, invoiceno: '', product_description: '', vat_7: '0' }))
     }
 
+    // BOOTS: vendor_expensecode / vendor_expensegroup are not used — always blank.
+    if (customerId === 'BOOTS') {
+      rows = rows.map((r) => ({ ...r, vendor_expensecode: '', vendor_expensegroup: '' }))
+    }
+
     // TSURUHA: one invoice = ONE row. The Description cell lists a charge line
     // plus several "(Period …) <channel>" lines (All Store / Lazada / Shopee);
     // the LLM tends to emit one row per line. Collapse rows that share an
@@ -815,6 +820,7 @@ export function postProcessRows(rawRows: Record<string, unknown>[], opts: PostPr
       WATSON: { ad: null,              penalty: false },  // always 3%
       VILLA:  { ad: null,              penalty: false },  // always 3%
       AEON:   { ad: null,              penalty: false },  // always 3%, VAT 0% (vat_7 forced 0 above)
+      BOOTS:  { ad: null,              penalty: false },  // always 3% (WHT printed on invoice; label as 3%)
       TSURUHA:{ ad: null,              penalty: false },  // always 3% on the merged "Total before Vat"
     }
     const taxRule = TAX_RULES[customerId]
