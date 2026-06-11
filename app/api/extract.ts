@@ -706,61 +706,53 @@ export function postProcessRows(rawRows: Record<string, unknown>[], opts: PostPr
       rows = rows.map((r) => ({ ...r, invoiceno: '', product_description: '', vat_7: '0' }))
     }
 
-    // BOOTS: collapse line items by their description (trailing "Ref. …" removed)
-    // into ONE row per description, summing amounts (and any VAT). On the
-    // rebate/fee invoice this yields exactly two rows — "Supplier/Flat Rebate
-    // (0.5%)" and "Distribution Fee Income (1.5%)" — each summing its many
-    // Ref-tagged lines. For a single-line invoice (e.g. "SP7 Scan out") it is a
-    // no-op. tax_3 / netamount are then computed per merged row by TAX_RULES.
-    // vendor_expensecode / vendor_expensegroup are not used → always blank.
+    // BOOTS: collapse ONLY the two rebate/fee categories, PER INVOICE.
+    //   - Classify a line by its distinctive, reliably-OCR'd token (Rebate /
+    //     Distribution) and snap to the canonical label — so OCR mangling the
+    //     leading word ("Supplier" → "Suppller") or the "(0.5%)" still groups
+    //     correctly (the % text comes from the fixed label, not the OCR).
+    //   - Merge per (invoiceno + category): a Boots PDF often holds many separate
+    //     invoices (e.g. several single-line "SP4 Scan out" invoices) — those must
+    //     stay distinct, so different Invoice No.s never merge together.
+    //   - Every OTHER line (Scan out, Anniversary support income, SPC, …) passes
+    //     through as its own row — never absorbed; just Ref-cleaned and blanked.
+    //   tax_3 / netamount are then computed per row by TAX_RULES (always 3%).
     if (customerId === 'BOOTS') {
       const cleanDesc = (s: string) =>
         s.replace(/\s*\bRef\b\.?.*$/i, '').replace(/\s+/g, ' ').trim()
-      // Boots rebate/fee invoices have exactly two categories, but OCR mangles
-      // the leading word ("Supplier" → "Suplpler"). Classify by voting on the
-      // reliable tokens (Rebate/Flat/0.5% vs Distribution/Fee/Income/1.5%) and
-      // map to the canonical category label, so misreads still group correctly.
-      // Lines matching neither (e.g. a general "SP7 Scan out" invoice) fall back
-      // to cleanDesc, leaving single-line invoices a no-op.
-      const classify = (s: string): string => {
-        const lc = s.toLowerCase()
-        let reb = 0
-        let fee = 0
-        if (/rebate/.test(lc)) reb++
-        if (/flat/.test(lc)) reb++
-        if (/0\s*[.,]\s*5\s*%/.test(lc)) reb++
-        if (/distribution/.test(lc)) fee++
-        if (/\bfee\b/.test(lc)) fee++
-        if (/income/.test(lc)) fee++
-        if (/1\s*[.,]\s*5\s*%/.test(lc)) fee++
-        if (reb > 0 && reb >= fee) return 'Supplier/Flat Rebate (0.5%)'
-        if (fee > 0) return 'Distribution Fee Income (1.5%)'
-        return cleanDesc(s)
+      const category = (s: string): string | null => {
+        if (/rebat/i.test(s)) return 'Supplier/Flat Rebate (0.5%)'
+        if (/distribut/i.test(s)) return 'Distribution Fee Income (1.5%)'
+        return null
       }
-      const groups = new Map<string, Record<string, unknown>[]>()
+      const out: Record<string, unknown>[] = []
+      const mergedByKey = new Map<string, Record<string, unknown>>()
       for (const r of rows) {
-        const key = classify(String((r.description as string) ?? ''))
-        if (!groups.has(key)) groups.set(key, [])
-        groups.get(key)!.push(r)
+        const base = { ...r, product_description: '', vendor_expensecode: '', vendor_expensegroup: '' }
+        const cat = category(String((r.description as string) ?? ''))
+        const amt = parseFloat(String((r.amount as string) ?? '').replace(/,/g, ''))
+        const vat = parseFloat(String((r.vat_7 as string) ?? '').replace(/,/g, ''))
+        if (!cat) {
+          out.push({ ...base, description: cleanDesc(String((r.description as string) ?? '')) })
+          continue
+        }
+        const key = String((r.invoiceno as string) ?? '').trim() + '|' + cat
+        const existing = mergedByKey.get(key)
+        if (existing) {
+          existing.__sum = (existing.__sum as number) + (isNaN(amt) ? 0 : amt)
+          existing.__vat = (existing.__vat as number) + (isNaN(vat) ? 0 : vat)
+        } else {
+          const row = { ...base, description: cat, __sum: isNaN(amt) ? 0 : amt, __vat: isNaN(vat) ? 0 : vat }
+          mergedByKey.set(key, row)
+          out.push(row)
+        }
       }
-      rows = [...groups.entries()].map(([desc, grp]) => {
-        let sum = 0
-        let vatSum = 0
-        for (const r of grp) {
-          const a = parseFloat(String((r.amount as string) ?? '').replace(/,/g, ''))
-          if (!isNaN(a)) sum += a
-          const v = parseFloat(String((r.vat_7 as string) ?? '').replace(/,/g, ''))
-          if (!isNaN(v)) vatSum += v
+      rows = out.map((r) => {
+        if ('__sum' in r) {
+          const { __sum, __vat, ...rest } = r as Record<string, unknown>
+          return { ...rest, amount: (__sum as number).toFixed(2), vat_7: (__vat as number).toFixed(2) }
         }
-        return {
-          ...grp[0],
-          description: desc,
-          product_description: '',
-          amount: sum.toFixed(2),
-          vat_7: vatSum.toFixed(2),
-          vendor_expensecode: '',
-          vendor_expensegroup: '',
-        }
+        return r
       })
     }
 

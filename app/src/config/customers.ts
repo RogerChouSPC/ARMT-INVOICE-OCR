@@ -117,7 +117,8 @@ product_description = "" (this vendor has no product-detail line).`,
     vendorCode: 'customer-line',
     vendorBranch: 'auto',
     notes: `vendor_customercode = the value next to the "Customer :" label (e.g. "S006-1").
-description = the line's "Description" text, verbatim (e.g. "SP7 Scan out", "Supplier/Flat Rebate (0.5%) Ref. PG26050877 15/05"). Extract EVERY line item as its OWN row — never skip or pre-merge lines. The server removes any trailing "Ref. …" and merges lines that share the same description (e.g. all "Supplier/Flat Rebate (0.5%)" lines, all "Distribution Fee Income (1.5%)" lines) into one row each.
+description = the line's "Description" text, verbatim (e.g. "SP4 Scan out", "Supplier/Flat Rebate (0.5%) Ref. PG26050877 18/02"). Extract EVERY line item as its OWN row — never skip or pre-merge lines.
+This PDF often contains MULTIPLE invoices; assign EACH line the "Invoice No." printed for its own section (do not reuse one invoice number for lines that belong to a different invoice). The server merges only the "Supplier/Flat Rebate" and "Distribution Fee Income" lines, per invoice, removing the trailing "Ref. …"; all other lines are kept as-is.
 product_description = "" (Boots has no separate product-detail column).
 vendor_expensecode = "" and vendor_expensegroup = "" (not used for Boots).
 Each line item has a VAT marker column next to the amount: "V" = VAT 7%, "N" = Non-VAT. When "V", put that line's VAT amount into vat_7; when "N", set vat_7 = "0".
