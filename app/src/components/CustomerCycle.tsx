@@ -27,8 +27,8 @@ export default function CustomerCycle() {
   return (
     <div className="flex justify-center items-center gap-3">
       {/* overflow-hidden clips the small slide above/below. Scale matches the
-          calmer hero heading (text-3xl / sm:text-4xl). */}
-      <span className="relative flex justify-center overflow-hidden text-3xl sm:text-4xl font-bold tracking-tight leading-tight py-1">
+          hero heading (text-5xl / sm:text-6xl) so the rotating name balances it. */}
+      <span className="relative flex justify-center overflow-hidden text-5xl sm:text-6xl font-bold tracking-tight leading-[1.15] py-1">
         {/* invisible widest-name spacer gives the container correct width + height */}
         <span className="invisible select-none" aria-hidden>Big C Food</span>
 
