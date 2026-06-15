@@ -76,7 +76,13 @@ vat_7 / tax_3 / netamount = copy the printed values ("บวกภาษีม�
     extractMode: 'ocr',
     vendorCode: 'customer-line',
     vendorBranch: 'blank',
-    notes: 'vendor_customercode = the value next to "เจ้าของ/ตัวแทน(รหัสร้านค้า)" (e.g. 9812292).',
+    notes: `vendor_customercode = the value next to "เจ้าของ/ตัวแทน(รหัสร้านค้า)" (e.g. 9812292).
+description = the "รายการ" value WITHOUT the word "รายการ" itself — just the item name (e.g. "Rebate", "Damage Allowance", "Promotion/Other Compensation").
+product_description = the "สินค้า" value WITHOUT the word "สินค้า"/":" — just the product code + product name (e.g. "18859473100593 โทฟุซังนมถั่วเหลือง...").
+remark = ONLY the real หมายเหตุ note for this item (the line right after the ระยะเวลา line, e.g. "(9812292)2.1 Non - Targeted Sale เดือน DEC25"). Do NOT include the boilerplate legal paragraph that begins "ข้าพเจ้าได้รับทราบ…" or the numbered "หมายเหตุ 1. … 3. …" text.
+vendor_expensegroup = "" (leave blank).
+vat_7 / tax_3 / netamount = copy the printed values; do NOT calculate.
+The server strips any leftover "รายการ"/"สินค้า" label and appends the remark to the description.`,
   },
   {
     id: 'BTM',

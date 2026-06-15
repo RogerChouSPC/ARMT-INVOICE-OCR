@@ -677,6 +677,23 @@ export function postProcessRows(rawRows: Record<string, unknown>[], opts: PostPr
       rows = rows.map((r) => ({ ...r, remark: cutAtNetting((r.remark as string) || '') }))
     }
 
+    // CFM: strip the leading "รายการ"/"สินค้า" labels the LLM sometimes keeps,
+    // blank vendor_expensegroup, and fold the remark into the description.
+    if (customerId === 'CFM') {
+      const stripLabel = (s: string, label: string) =>
+        s.replace(new RegExp('^\\s*' + label + '\\s*:?\\s*'), '').trim()
+      // defensive: cut the boilerplate that can leak into the remark
+      const cutRemark = (s: string) =>
+        s.split(/ข้าพเจ้าได้รับทราบ|หมายเหตุ\s*\n?\s*1\./)[0].trim()
+      rows = rows.map((r) => {
+        let desc = stripLabel(String((r.description as string) ?? ''), 'รายการ')
+        const pdesc = stripLabel(String((r.product_description as string) ?? ''), 'สินค้า')
+        const remark = cutRemark(String((r.remark as string) ?? ''))
+        if (remark) desc = [desc, remark].filter(Boolean).join(' ').trim()
+        return { ...r, description: desc, product_description: pdesc, remark, vendor_expensegroup: '' }
+      })
+    }
+
     // CMK / BTM / CJ: the หมายเหตุ note goes into `product_description` (these
     // invoices have no product-detail line); truncate it at Netting/สำหรับร้านค้า.
     if (customerId === 'CMK' || customerId === 'BTM' || customerId === 'CJ') {
