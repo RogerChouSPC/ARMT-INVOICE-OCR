@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express'
+import { divisionSalesPromptBlock } from './divisionSales'
 
 // Customer rules live in src/config/customers.ts (single source of truth, used by
 // the frontend). The API stays self-contained and does not import from src/ — the
@@ -57,6 +58,9 @@ ${customerSection}
 
 Given raw text from one or more invoice pages (separated by "--- PAGE BREAK ---"), extract ALL invoice line items and return a JSON array. Each element = one row.
 
+PRODUCT → DIVISIONSALE MAPPING (สหพัฒน์ product lines; match the product/brand mentioned in the invoice to its division letter):
+${divisionSalesPromptBlock()}
+
 Output fields (22 columns):
 - customergroup: from Customer Master lookup (exact copy)
 - customercode: from Customer Master lookup (exact copy)
@@ -65,7 +69,7 @@ Output fields (22 columns):
 - vendor_branch: see CUSTOMER-SPECIFIC INSTRUCTIONS above
 - vendor_expensecode: expense code if present, else ""
 - vendor_expensegroup: expense group if present, else ""
-- divisionsale: always return "" (not used yet)
+- divisionsale: Look at the product/brand named in THIS row (use description, product_description, and the line's product text). If it matches a product in the PRODUCT → DIVISIONSALE MAPPING above — match by brand/product keyword, e.g. "โชกุบุสซึ" → "สบู่เหลวโชกุบุสซึ" → P — output that division letter (A / N / P / H). When a brand word maps to different divisions, use the FULL product description to pick the right one (e.g. "ปลากระป๋องซื่อสัตย์" → N, "ผงซักฟอกซื่อสัตย์" → P). If no listed product/brand is mentioned, return "".
 - invoiceno: invoice number / เลขที่
 - invoicedate: invoice date → YYYY-MM-DD (see date rules below)
 - duedate: due/payment date → YYYY-MM-DD (see date rules below)
