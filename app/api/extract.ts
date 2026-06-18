@@ -397,7 +397,7 @@ function appendInvoiceSeq(rows: Record<string, unknown>[]): Record<string, unkno
     if (!inv || (counts.get(inv) || 0) <= 1) return r
     const n = (seen.get(inv) || 0) + 1
     seen.set(inv, n)
-    return { ...r, invoiceno: `${inv}-${n}` }
+    return { ...r, invoiceno: `${inv}-${String(n).padStart(3, '0')}` }
   })
 }
 
@@ -637,6 +637,12 @@ export function postProcessRows(rawRows: Record<string, unknown>[], opts: PostPr
       // One Lotus invoice number spans several deal rows — append a running
       // sequence suffix (…CN3-1, …CN3-2). Done LAST, after all invoiceno-based
       // lookups above, so page isolation still works on the bare number.
+      rows = appendInvoiceSeq(rows)
+    }
+
+    // CP All (7-Eleven): one invoice number can span several line items —
+    // append the running 3-digit sequence suffix, same as Makro / Lotus.
+    if (customerId === 'CP_ALL') {
       rows = appendInvoiceSeq(rows)
     }
 
