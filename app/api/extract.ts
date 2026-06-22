@@ -511,27 +511,65 @@ export async function extractRowsCore(input: ExtractCoreInput): Promise<ExtractC
       return { ok: false, status: 502, error: 'The model returned invalid JSON (try fewer pages or re-run).' }
     }
   } else {
-    rawRows = []
+    // Multi-batch path: each batch is one model call. Running them sequentially
+    // made large PDFs (e.g. 37 pages → 5 calls) ~5× slower and tripped the
+    // gateway timeout (504). Run them through a bounded-concurrency pool instead,
+    // capped so even a 100-page doc (13 batches) never fires more than CONCURRENCY
+    // simultaneous OpenRouter calls (rate-limit safety) — and assemble the parsed
+    // rows strictly IN BATCH ORDER so appendInvoiceSeq sees rows in page order.
+    const CONCURRENCY = 5
+
+    // Build the batch texts first, preserving order.
+    const batchTexts: string[] = []
     for (let i = 0; i < pages.length; i += BATCH) {
-      const batchPages = pages.slice(i, i + BATCH)
-      const batchText = batchPages.join('\n\n--- PAGE BREAK ---\n\n')
-      const call = await callExtractModel(
-        buildExtractMessages({ ...input, text: batchText }),
-        input.apiKey
-      )
-      if (!call.ok) return call
-      const start = i + 1
-      const end = Math.min(i + BATCH, pages.length)
-      try {
-        const part = parseJsonFromText(call.content) as Record<string, unknown>[]
-        rawRows.push(...part)
-      } catch {
-        return {
-          ok: false,
-          status: 502,
-          error: `Extraction failed on pages ${start}-${end} of ${pages.length} (model output not valid JSON).`,
+      batchTexts.push(pages.slice(i, i + BATCH).join('\n\n--- PAGE BREAK ---\n\n'))
+    }
+
+    type BatchResult =
+      | { ok: true; rows: Record<string, unknown>[] }
+      | { ok: false; status: number; error: string }
+
+    // Order-preserving bounded pool (same shape as the pool in api/ocrPdf.ts):
+    // at most `n` workers pull from a shared index, writing results by index.
+    const results: BatchResult[] = new Array(batchTexts.length)
+    let next = 0
+    async function worker() {
+      while (next < batchTexts.length) {
+        const i = next++
+        const batchText = batchTexts[i]
+        const start = i * BATCH + 1
+        const end = Math.min(i * BATCH + BATCH, pages.length)
+        const call = await callExtractModel(
+          buildExtractMessages({ ...input, text: batchText }),
+          input.apiKey
+        )
+        if (!call.ok) {
+          results[i] = { ok: false, status: call.status, error: call.error }
+          continue
+        }
+        try {
+          results[i] = { ok: true, rows: parseJsonFromText(call.content) as Record<string, unknown>[] }
+        } catch {
+          results[i] = {
+            ok: false,
+            status: 502,
+            error: `Extraction failed on pages ${start}-${end} of ${pages.length} (model output not valid JSON).`,
+          }
         }
       }
+    }
+    await Promise.all(
+      Array.from({ length: Math.min(CONCURRENCY, batchTexts.length) }, worker)
+    )
+
+    // Surface the earliest-by-index failure (so the page range in the error is the
+    // first failing batch in page order); only merge rows when EVERY batch parsed.
+    const firstFailure = results.find((r) => !r.ok)
+    if (firstFailure && !firstFailure.ok) return firstFailure
+
+    rawRows = []
+    for (const r of results) {
+      if (r.ok) rawRows.push(...r.rows)
     }
   }
 
