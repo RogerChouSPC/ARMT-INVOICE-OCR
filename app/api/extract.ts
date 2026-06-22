@@ -456,7 +456,7 @@ export async function callExtractModel(
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({ model: MODEL, messages, temperature: 0.1 }),
+      body: JSON.stringify({ model: MODEL, messages, temperature: 0.1, max_tokens: 32768 }),
     })
 
     if (!apiRes.ok) {
@@ -489,16 +489,54 @@ export interface PostProcessOpts {
  * by the HTTP handler below.  Behavior is identical to the original handler.
  */
 export async function extractRowsCore(input: ExtractCoreInput): Promise<ExtractCoreResult> {
-  const call = await callExtractModel(buildExtractMessages(input), input.apiKey)
-  if (!call.ok) return call
+  // Large PDFs (e.g. a 37-page Makro register) overflow the model's output token
+  // budget when sent in one shot, truncating the JSON → parse throws → blank.
+  // Batch by page so each call's output stays within max_tokens, and surface a
+  // parse exception as an error instead of silently returning [].
+  const pages = input.text
+    .split(/\n*\s*---\s*PAGE BREAK\s*---\s*\n*/)
+    .filter((p) => p.trim().length > 0)
+  const BATCH = 8
 
   let rawRows: Record<string, unknown>[]
-  try {
-    rawRows = parseJsonFromText(call.content) as Record<string, unknown>[]
-  } catch {
+
+  if (pages.length <= BATCH) {
+    // Common small-doc path — single call, unchanged behavior except that a true
+    // JSON-parse exception now surfaces an error rather than blanking the result.
+    const call = await callExtractModel(buildExtractMessages(input), input.apiKey)
+    if (!call.ok) return call
+    try {
+      rawRows = parseJsonFromText(call.content) as Record<string, unknown>[]
+    } catch {
+      return { ok: false, status: 502, error: 'The model returned invalid JSON (try fewer pages or re-run).' }
+    }
+  } else {
     rawRows = []
+    for (let i = 0; i < pages.length; i += BATCH) {
+      const batchPages = pages.slice(i, i + BATCH)
+      const batchText = batchPages.join('\n\n--- PAGE BREAK ---\n\n')
+      const call = await callExtractModel(
+        buildExtractMessages({ ...input, text: batchText }),
+        input.apiKey
+      )
+      if (!call.ok) return call
+      const start = i + 1
+      const end = Math.min(i + BATCH, pages.length)
+      try {
+        const part = parseJsonFromText(call.content) as Record<string, unknown>[]
+        rawRows.push(...part)
+      } catch {
+        return {
+          ok: false,
+          status: 502,
+          error: `Extraction failed on pages ${start}-${end} of ${pages.length} (model output not valid JSON).`,
+        }
+      }
+    }
   }
 
+  // Post-process ONCE over the FULL original text so per-invoice page isolation,
+  // Makro VAT/WHT calc, and appendInvoiceSeq see every row + the whole document.
   const rows = postProcessRows(rawRows, {
     text: input.text,
     vendorCode: input.vendorCode,
