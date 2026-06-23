@@ -43,7 +43,7 @@ export async function ocrImageCore(image: string, apiKey: string): Promise<OcrCo
             },
             {
               type: 'text',
-              text: 'Extract ALL text from this invoice image exactly as it appears. Include every word, number, date, barcode, and special character. Preserve structure and line breaks. Output only the raw extracted text.',
+              text: 'Extract ALL text from this invoice image exactly as it appears. Include every word, number, date, barcode, and special character.\nFor any TABLE of line items, read it ROW BY ROW (left to right) and output EACH row on its OWN single line, keeping that row\'s description together with its amount on the same line — e.g. "DF2026053542 Promotion Support Makro_P 14,713.06". Do NOT read a whole column as a separate block; reading the description column and the amount column separately mis-pairs each description with the wrong amount. If a row prints a category/header line above the detail line, keep it with that same row. Preserve the original top-to-bottom row order.\nOutput only the raw extracted text.',
             },
           ],
         }],
