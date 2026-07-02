@@ -686,7 +686,9 @@ export function postProcessRows(rawRows: Record<string, unknown>[], opts: PostPr
     //      (skipped for Formats B/C where description is per-row in a table).
     //   3. vendor_customercode: convert printed "TH0XXXX" → internal "9XXXX".
     // Tax fields are NEVER calculated for Lotus — the LLM copies the printed
-    // values (or "0.00" when absent) per the customer notes.
+    // values (or "0.00" when absent) per the customer notes. EXCEPTION: credit-
+    // note invoices (invoiceno starting with "C") have no printed net amount, so
+    // netamount is computed below (amount + vat_7 − all withholding taxes).
     if (customerId === 'LT') {
       const validInvoices = findLTInvoiceCandidates(text)
       rows = rows.filter((r) => {
@@ -708,6 +710,20 @@ export function postProcessRows(rawRows: Record<string, unknown>[], opts: PostPr
         const code = (withDesc.vendor_customercode as string) || ''
         const converted = convertLTVendorCode(code)
         return converted !== code ? { ...withDesc, vendor_customercode: converted } : withDesc
+      })
+
+      // Lotus CREDIT NOTE invoices (invoiceno starts with "C") print only AMOUNT
+      // and VAT — no net amount — so compute it here:
+      //   netamount = amount + vat_7 − tax_2 − tax_3 − tax_5
+      // Other Lotus formats keep the printed netamount (copied by the LLM).
+      rows = rows.map((r) => {
+        const inv = ((r.invoiceno as string) || '').trim().toUpperCase()
+        if (!inv.startsWith('C')) return r
+        const amt = parseFloat(String((r.amount as string) ?? '').replace(/,/g, ''))
+        if (isNaN(amt)) return r
+        const num = (v: unknown) => parseFloat(String(v ?? '').replace(/,/g, '')) || 0
+        const net = amt + num(r.vat_7) - num(r.tax_2) - num(r.tax_3) - num(r.tax_5)
+        return { ...r, netamount: net.toFixed(2) }
       })
 
       // One Lotus invoice number spans several deal rows — append a running
