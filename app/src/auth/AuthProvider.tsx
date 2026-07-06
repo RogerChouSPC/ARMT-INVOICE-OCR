@@ -81,10 +81,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
   }
 
+  // True when the JWT still has >60s before it expires.
+  const isFresh = (jwt: string | undefined): boolean => {
+    if (!jwt) return false
+    try {
+      const payload = JSON.parse(atob(jwt.split('.')[1] ?? ''))
+      return typeof payload.exp === 'number' && payload.exp * 1000 > Date.now() + 60_000
+    } catch { return false }
+  }
+
   const getToken = async (): Promise<string | null> => {
     if (!user) return null
     try {
-      const result = await msalInstance.acquireTokenSilent({ ...loginRequest, account: user.account })
+      let result = await msalInstance.acquireTokenSilent({ ...loginRequest, account: user.account })
+      // acquireTokenSilent can return a cached ID token that has already expired
+      // (it tracks the access token's lifetime, not the id token's). If ours is
+      // stale, force a refresh so the server never sees an expired token.
+      if (!isFresh(result.idToken)) {
+        result = await msalInstance.acquireTokenSilent({ ...loginRequest, account: user.account, forceRefresh: true })
+      }
       return result.idToken
     } catch (e) {
       if (e instanceof InteractionRequiredAuthError) {

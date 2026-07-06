@@ -42,7 +42,7 @@ function isNetworkError(err: { code?: string; message?: string }): boolean {
 function verifyClaimsOnly(claims: Record<string, unknown>, why: string): VerifyResult {
   const audOk = claims.aud === CLIENT_ID
   const tidOk = claims.tid === TENANT || (typeof claims.iss === 'string' && claims.iss.includes(TENANT))
-  const expOk = typeof claims.exp === 'number' && claims.exp * 1000 > Date.now()
+  const expOk = typeof claims.exp === 'number' && claims.exp * 1000 > Date.now() - 120_000
   if (audOk && tidOk && expOk) return { ok: true, reason: `ok-claims-only (${why})` }
   return { ok: false, reason: `claims-invalid audOk=${audOk} tidOk=${tidOk} expOk=${expOk} (${why})` }
 }
@@ -61,7 +61,7 @@ export async function verifyAzureToken(authHeader: string | undefined): Promise<
   if (Date.now() < jwksBlockedUntil) return verifyClaimsOnly(claims, 'jwks-cooldown')
 
   try {
-    const { payload } = await jwtVerify(token, JWKS, { audience: CLIENT_ID })
+    const { payload } = await jwtVerify(token, JWKS, { audience: CLIENT_ID, clockTolerance: 120 })
     const p = payload as Record<string, unknown>
     const issOk = typeof p.iss === 'string' && p.iss.includes(TENANT)
     if (p.tid === TENANT || issOk) return { ok: true, reason: 'ok' }
