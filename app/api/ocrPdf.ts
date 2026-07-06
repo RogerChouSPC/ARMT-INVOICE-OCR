@@ -80,7 +80,7 @@ function renderPdfToPngBase64(pdfBytes: Buffer): string[] {
 
 export default async function handler(req: Request, res: Response) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' })
-  if (!await verifyAzureToken(req.headers.authorization)) return res.status(401).json({ error: 'Unauthorized' })
+  { const v = await verifyAzureToken(req.headers.authorization); if (!v.ok) return res.status(401).json({ error: 'Unauthorized', reason: v.reason }) }
 
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) return res.status(500).json({ error: 'OPENROUTER_API_KEY not configured' })

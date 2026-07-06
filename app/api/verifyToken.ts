@@ -6,24 +6,40 @@ const CLIENT_ID = process.env.AZURE_CLIENT_ID || process.env.VITE_AZURE_CLIENT_I
 // Azure AD signing keys for this tenant (cached + auto-refreshed by jose).
 const JWKS = createRemoteJWKSet(new URL(`https://login.microsoftonline.com/${TENANT}/discovery/v2.0/keys`))
 
+/** Decode a JWT payload WITHOUT verifying — for diagnostics only. */
+function peekClaims(token: string): Record<string, unknown> {
+  try {
+    return JSON.parse(Buffer.from(token.split('.')[1] || '', 'base64').toString('utf8'))
+  } catch {
+    return {}
+  }
+}
+
+export interface VerifyResult { ok: boolean; reason: string }
+
 /**
  * Validate an Azure AD ID token locally: verifies the RS256 signature against
  * the tenant's published keys, the audience (our app), the tenant, and expiry.
  * No call to Microsoft Graph — robust to Conditional Access / token protection.
+ * Returns a `reason` string so a 401 can explain WHY (diagnostics).
  */
-export async function verifyAzureToken(authHeader: string | undefined): Promise<boolean> {
-  if (!authHeader?.startsWith('Bearer ')) return false
+export async function verifyAzureToken(authHeader: string | undefined): Promise<VerifyResult> {
+  if (!authHeader?.startsWith('Bearer ')) return { ok: false, reason: 'no-bearer-header' }
   const token = authHeader.slice(7)
+  const claims = peekClaims(token)
+  const audSeen = String(claims.aud ?? '?')
+  const tidSeen = String(claims.tid ?? '?')
   try {
-    // Verify signature + expiry + audience. Issuer format can be v1.0
-    // (sts.windows.net) or v2.0 (login.microsoftonline.com/.../v2.0), so check
-    // the tenant via the `tid` claim instead of pinning an exact issuer string.
     const { payload } = await jwtVerify(token, JWKS, { audience: CLIENT_ID })
     const p = payload as Record<string, unknown>
-    const tid = p.tid
     const issOk = typeof p.iss === 'string' && p.iss.includes(TENANT)
-    return (tid === TENANT || issOk)
-  } catch {
-    return false
+    if (p.tid === TENANT || issOk) return { ok: true, reason: 'ok' }
+    return { ok: false, reason: `tenant-mismatch tid=${String(p.tid)}` }
+  } catch (e) {
+    const err = e as { code?: string; message?: string }
+    return {
+      ok: false,
+      reason: `verify-failed code=${err?.code ?? ''} msg=${String(err?.message ?? e).slice(0, 140)} | tokenAud=${audSeen} tokenTid=${tidSeen} expectAud=${CLIENT_ID} expectTid=${TENANT}`,
+    }
   }
 }

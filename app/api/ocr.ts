@@ -62,8 +62,9 @@ export default async function handler(req: Request, res: Response) {
     return res.status(405).json({ error: 'Method Not Allowed' })
   }
 
-  if (!await verifyAzureToken(req.headers.authorization)) {
-    return res.status(401).json({ error: 'Unauthorized' })
+  {
+    const v = await verifyAzureToken(req.headers.authorization)
+    if (!v.ok) return res.status(401).json({ error: 'Unauthorized', reason: v.reason })
   }
 
   const apiKey = process.env.OPENROUTER_API_KEY

@@ -200,7 +200,7 @@ export function extractPaymentAdvice(pdfBytes: Buffer, filename: string): Paymen
 // ── HTTP handler (auth-gated, mirrors api/ocr.ts) ──
 export default async function handler(req: Request, res: Response) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' })
-  if (!await verifyAzureToken(req.headers.authorization)) return res.status(401).json({ error: 'Unauthorized' })
+  { const v = await verifyAzureToken(req.headers.authorization); if (!v.ok) return res.status(401).json({ error: 'Unauthorized', reason: v.reason }) }
 
   try {
     const body = req.body || {}

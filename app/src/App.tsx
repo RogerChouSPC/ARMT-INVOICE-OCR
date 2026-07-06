@@ -93,7 +93,7 @@ export default function App() {
           })
           if (!res.ok) {
             const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
-            throw new Error(err.error || `Extract failed: ${res.status}`)
+            throw new Error([err.error, err.reason].filter(Boolean).join(" — ") || `Extract failed: ${res.status}`)
           }
           const { rows: r } = await res.json()
           extractedRows = r
@@ -112,7 +112,7 @@ export default function App() {
           })
           if (!ocrRes.ok) {
             const err = await ocrRes.json().catch(() => ({ error: `HTTP ${ocrRes.status}` }))
-            throw new Error(err.error || `OCR failed: ${ocrRes.status}`)
+            throw new Error([err.error, err.reason].filter(Boolean).join(" — ") || `OCR failed: ${ocrRes.status}`)
           }
           const { text: ocrCombined } = await ocrRes.json()
           setPageStats((s) => ({ ...s, done: pagesBefore + pageCount }))
@@ -137,7 +137,7 @@ export default function App() {
           })
           if (!extractRes.ok) {
             const err = await extractRes.json().catch(() => ({ error: `HTTP ${extractRes.status}` }))
-            throw new Error(err.error || `Extract failed: ${extractRes.status}`)
+            throw new Error([err.error, err.reason].filter(Boolean).join(" — ") || `Extract failed: ${extractRes.status}`)
           }
           const { rows: r } = await extractRes.json()
           extractedRows = r
