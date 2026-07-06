@@ -75,8 +75,9 @@ vat_7 / tax_3 / netamount = copy the printed values ("บวกภาษีม�
     match: { filenameKeywords: ['cfm'], nameKeywords: ['เซ็นทรัลฟู้ด มินิมาร์เก็ต', 'central food minimart'], taxids: ['0105535133093'] },
     extractMode: 'ocr',
     vendorCode: 'customer-line',
-    vendorBranch: 'blank',
+    vendorBranch: 'auto',
     notes: `vendor_customercode = the value next to "เจ้าของ/ตัวแทน(รหัสร้านค้า)" (e.g. 9812292).
+vendor_branch = the number printed under/after the "Group" label (e.g. 29150, 29120, 29510). This is NOT the "เจ้าของ/ตัวแทน(รหัสร้านค้า)" store code (9812292) and NOT the "Site" number.
 description = the "รายการ" value WITHOUT the word "รายการ" itself — just the item name (e.g. "Rebate", "Damage Allowance", "Promotion/Other Compensation").
 product_description = the "สินค้า" value WITHOUT the word "สินค้า"/":" — just the product code + product name (e.g. "18859473100593 โทฟุซังนมถั่วเหลือง...").
 remark = ONLY the real หมายเหตุ note for this item (the line right after the ระยะเวลา line, e.g. "(9812292)2.1 Non - Targeted Sale เดือน DEC25"). Do NOT include the boilerplate legal paragraph that begins "ข้าพเจ้าได้รับทราบ…" or the numbered "หมายเหตุ 1. … 3. …" text.
