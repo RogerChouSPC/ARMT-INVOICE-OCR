@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express'
 import { divisionSalesPromptBlock } from './divisionSales'
+import { verifyAzureToken } from './verifyToken'
 
 // Customer rules live in src/config/customers.ts (single source of truth, used by
 // the frontend). The API stays self-contained and does not import from src/ — the
@@ -9,18 +10,6 @@ import { divisionSalesPromptBlock } from './divisionSales'
 export const DEFAULT_CUSTOMER_SECTION = `DETECTED CUSTOMER: unknown — use general rules.
 vendor_customercode: a code in [brackets]/(parentheses) near the company name or ชื่อผู้ซื้อ line; otherwise a labelled รหัสร้านค้า / Customer Code. Strip vendor prefixes from hyphenated codes (e.g. "TOP-M802316" → "802316").
 vendor_branch: only an explicitly labelled branch ("สาขาที่", "Branch", "Site code"); "Group [number]" is NOT a branch; return "" if none found.`
-
-async function verifyAzureToken(authHeader: string | undefined): Promise<boolean> {
-  if (!authHeader?.startsWith('Bearer ')) return false
-  try {
-    const res = await fetch('https://graph.microsoft.com/v1.0/me', {
-      headers: { Authorization: authHeader },
-    })
-    return res.ok
-  } catch {
-    return false
-  }
-}
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 const MODEL = 'google/gemini-2.5-flash'

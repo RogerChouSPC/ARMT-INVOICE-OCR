@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readdirSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { verifyAzureToken } from './verifyToken'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CP Axtra (Makro) "Payment Advice" extractor.
@@ -197,16 +198,6 @@ export function extractPaymentAdvice(pdfBytes: Buffer, filename: string): Paymen
 }
 
 // ── HTTP handler (auth-gated, mirrors api/ocr.ts) ──
-async function verifyAzureToken(authHeader: string | undefined): Promise<boolean> {
-  if (!authHeader?.startsWith('Bearer ')) return false
-  try {
-    const res = await fetch('https://graph.microsoft.com/v1.0/me', { headers: { Authorization: authHeader } })
-    return res.ok
-  } catch {
-    return false
-  }
-}
-
 export default async function handler(req: Request, res: Response) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' })
   if (!await verifyAzureToken(req.headers.authorization)) return res.status(401).json({ error: 'Unauthorized' })

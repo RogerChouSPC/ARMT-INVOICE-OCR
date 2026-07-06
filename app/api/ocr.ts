@@ -1,16 +1,5 @@
 import type { Request, Response } from 'express'
-
-async function verifyAzureToken(authHeader: string | undefined): Promise<boolean> {
-  if (!authHeader?.startsWith('Bearer ')) return false
-  try {
-    const res = await fetch('https://graph.microsoft.com/v1.0/me', {
-      headers: { Authorization: authHeader },
-    })
-    return res.ok
-  } catch {
-    return false
-  }
-}
+import { verifyAzureToken } from './verifyToken'
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 const MODEL = 'google/gemini-2.5-flash'

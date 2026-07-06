@@ -4,6 +4,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync, rmSy
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ocrImageCore } from './ocr.ts'
+import { verifyAzureToken } from './verifyToken'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Server-side OCR for a whole PDF.
@@ -74,16 +75,6 @@ function renderPdfToPngBase64(pdfBytes: Buffer): string[] {
       .map(({ f }) => readFileSync(join(dir, f)).toString('base64'))
   } finally {
     rmSync(dir, { recursive: true, force: true })
-  }
-}
-
-async function verifyAzureToken(authHeader: string | undefined): Promise<boolean> {
-  if (!authHeader?.startsWith('Bearer ')) return false
-  try {
-    const res = await fetch('https://graph.microsoft.com/v1.0/me', { headers: { Authorization: authHeader } })
-    return res.ok
-  } catch {
-    return false
   }
 }
 

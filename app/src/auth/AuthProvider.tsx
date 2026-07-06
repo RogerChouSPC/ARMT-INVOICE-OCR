@@ -85,12 +85,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!user) return null
     try {
       const result = await msalInstance.acquireTokenSilent({ ...loginRequest, account: user.account })
-      return result.accessToken
+      return result.idToken
     } catch (e) {
       if (e instanceof InteractionRequiredAuthError) {
         try {
           const result = await msalInstance.acquireTokenPopup({ ...loginRequest, account: user.account })
-          return result.accessToken
+          return result.idToken
         } catch { return null }
       }
       return null
