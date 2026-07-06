@@ -16,7 +16,7 @@ export async function renderPdfPages(
   onProgress?: (current: number, total: number) => void
 ): Promise<RenderedPage[]> {
   const arrayBuffer = await file.arrayBuffer()
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer, isEvalSupported: false }).promise
   const pages: RenderedPage[] = []
 
   for (let i = 1; i <= pdf.numPages; i++) {

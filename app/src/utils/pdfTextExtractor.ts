@@ -9,7 +9,7 @@ export interface PdfTextResult {
 /** Quickly read a PDF's page count (metadata only — no text extraction). */
 export async function countPdfPages(file: File): Promise<number> {
   const arrayBuffer = await file.arrayBuffer()
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer, isEvalSupported: false }).promise
   return pdf.numPages
 }
 
@@ -20,7 +20,7 @@ export async function countPdfPages(file: File): Promise<number> {
  */
 export async function extractPdfText(file: File): Promise<PdfTextResult> {
   const arrayBuffer = await file.arrayBuffer()
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer, isEvalSupported: false }).promise
 
   const pageParts: string[] = []
   let totalChars = 0
