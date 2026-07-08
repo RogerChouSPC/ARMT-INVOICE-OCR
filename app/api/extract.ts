@@ -95,8 +95,21 @@ export const FALLBACK_CUSTOMER_MASTER = [
 
 export function parseJsonFromText(text: string): object[] {
   const stripped = text.trim().replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '')
-  const parsed = JSON.parse(stripped)
-  return Array.isArray(parsed) ? parsed : [parsed]
+  try {
+    const parsed = JSON.parse(stripped)
+    return Array.isArray(parsed) ? parsed : [parsed]
+  } catch (err) {
+    // Lenient fallback: the model sometimes wraps the JSON array in prose
+    // ("here you go: [...] thanks"). Extract the outermost array — from the
+    // first '[' to the last ']' — and parse that. Only rethrow if it also fails.
+    const first = stripped.indexOf('[')
+    const last = stripped.lastIndexOf(']')
+    if (first >= 0 && last > first) {
+      const parsed = JSON.parse(stripped.slice(first, last + 1))
+      return Array.isArray(parsed) ? parsed : [parsed]
+    }
+    throw err
+  }
 }
 
 // Vendors where vendor_customercode is always blank — guard for the case where
@@ -477,89 +490,101 @@ export interface PostProcessOpts {
  * can be called directly (e.g. by the eval harness in scripts/eval) as well as
  * by the HTTP handler below.  Behavior is identical to the original handler.
  */
+// Extract rows for a slice of pages. A model CALL failure (network/429/5xx)
+// propagates (can't recover). A JSON-PARSE failure is recovered by splitting the
+// slice in half and retrying each half; a single page that still won't parse
+// (after one retry) is SKIPPED (logged) so one bad page can't lose the whole
+// document. Runs its sub-splits SEQUENTIALLY so it never exceeds the outer pool.
+async function extractPageSlice(
+  pages: string[],
+  input: ExtractCoreInput,
+  pageOffset: number, // 0-based index of pages[0] within the full document, for logging
+): Promise<{ rows: Record<string, unknown>[]; failed: number[] }> {
+  const text = pages.join('\n\n--- PAGE BREAK ---\n\n')
+  const call = await callExtractModel(buildExtractMessages({ ...input, text }), input.apiKey)
+  if (!call.ok) throw Object.assign(new Error(call.error), { status: call.status, error: call.error })
+  try {
+    return { rows: parseJsonFromText(call.content) as Record<string, unknown>[], failed: [] }
+  } catch {
+    if (pages.length === 1) {
+      // Retry the single page ONCE (models are non-deterministic), then skip it.
+      const retry = await callExtractModel(buildExtractMessages({ ...input, text }), input.apiKey)
+      if (retry.ok) {
+        try { return { rows: parseJsonFromText(retry.content) as Record<string, unknown>[], failed: [] } } catch { /* fall through */ }
+      }
+      return { rows: [], failed: [pageOffset + 1] } // 1-based page number, skipped
+    }
+    const mid = Math.ceil(pages.length / 2)
+    const a = await extractPageSlice(pages.slice(0, mid), input, pageOffset)
+    const b = await extractPageSlice(pages.slice(mid), input, pageOffset + mid)
+    return { rows: [...a.rows, ...b.rows], failed: [...a.failed, ...b.failed] }
+  }
+}
+
 export async function extractRowsCore(input: ExtractCoreInput): Promise<ExtractCoreResult> {
   // Large PDFs (e.g. a 37-page Makro register) overflow the model's output token
   // budget when sent in one shot, truncating the JSON → parse throws → blank.
-  // Batch by page so each call's output stays within max_tokens, and surface a
-  // parse exception as an error instead of silently returning [].
+  // Batch by page so each call's output stays within max_tokens. A batch whose
+  // output won't parse is NOT fatal: extractPageSlice splits it (8→4+4→2+2→1+1)
+  // and retries, skipping only a truly-unparseable single page.
   const pages = input.text
     .split(/\n*\s*---\s*PAGE BREAK\s*---\s*\n*/)
     .filter((p) => p.trim().length > 0)
   const BATCH = 8
+  const CONCURRENCY = 5
 
-  let rawRows: Record<string, unknown>[]
+  // Build the initial BATCH-sized chunks of pages, preserving order.
+  const chunks: string[][] = []
+  for (let i = 0; i < pages.length; i += BATCH) {
+    chunks.push(pages.slice(i, i + BATCH))
+  }
 
-  if (pages.length <= BATCH) {
-    // Common small-doc path — single call, unchanged behavior except that a true
-    // JSON-parse exception now surfaces an error rather than blanking the result.
-    const call = await callExtractModel(buildExtractMessages(input), input.apiKey)
-    if (!call.ok) return call
-    try {
-      rawRows = parseJsonFromText(call.content) as Record<string, unknown>[]
-    } catch {
-      return { ok: false, status: 502, error: 'The model returned invalid JSON (try fewer pages or re-run).' }
-    }
-  } else {
-    // Multi-batch path: each batch is one model call. Running them sequentially
-    // made large PDFs (e.g. 37 pages → 5 calls) ~5× slower and tripped the
-    // gateway timeout (504). Run them through a bounded-concurrency pool instead,
-    // capped so even a 100-page doc (13 batches) never fires more than CONCURRENCY
-    // simultaneous OpenRouter calls (rate-limit safety) — and assemble the parsed
-    // rows strictly IN BATCH ORDER so appendInvoiceSeq sees rows in page order.
-    const CONCURRENCY = 5
+  type ChunkResult =
+    | { ok: true; rows: Record<string, unknown>[]; failed: number[] }
+    | { ok: false; status: number; error: string }
 
-    // Build the batch texts first, preserving order.
-    const batchTexts: string[] = []
-    for (let i = 0; i < pages.length; i += BATCH) {
-      batchTexts.push(pages.slice(i, i + BATCH).join('\n\n--- PAGE BREAK ---\n\n'))
-    }
-
-    type BatchResult =
-      | { ok: true; rows: Record<string, unknown>[] }
-      | { ok: false; status: number; error: string }
-
-    // Order-preserving bounded pool (same shape as the pool in api/ocrPdf.ts):
-    // at most `n` workers pull from a shared index, writing results by index.
-    const results: BatchResult[] = new Array(batchTexts.length)
-    let next = 0
-    async function worker() {
-      while (next < batchTexts.length) {
-        const i = next++
-        const batchText = batchTexts[i]
-        const start = i * BATCH + 1
-        const end = Math.min(i * BATCH + BATCH, pages.length)
-        const call = await callExtractModel(
-          buildExtractMessages({ ...input, text: batchText }),
-          input.apiKey
-        )
-        if (!call.ok) {
-          results[i] = { ok: false, status: call.status, error: call.error }
-          continue
-        }
-        try {
-          results[i] = { ok: true, rows: parseJsonFromText(call.content) as Record<string, unknown>[] }
-        } catch {
-          results[i] = {
-            ok: false,
-            status: 502,
-            error: `Extraction failed on pages ${start}-${end} of ${pages.length} (model output not valid JSON).`,
-          }
+  // Order-preserving bounded pool (same shape as the pool in api/ocrPdf.ts):
+  // at most `n` workers pull from a shared index, writing results by index.
+  // A model-call failure (network/429/5xx) thrown by extractPageSlice becomes a
+  // returned failure; a JSON-parse failure is recovered inside extractPageSlice.
+  const results: ChunkResult[] = new Array(chunks.length)
+  let next = 0
+  async function worker() {
+    while (next < chunks.length) {
+      const i = next++
+      try {
+        const { rows, failed } = await extractPageSlice(chunks[i], input, i * BATCH)
+        results[i] = { ok: true, rows, failed }
+      } catch (err) {
+        const e = err as { status?: number; error?: string }
+        results[i] = {
+          ok: false,
+          status: e.status ?? 502,
+          error: e.error ?? (err instanceof Error ? err.message : String(err)),
         }
       }
     }
-    await Promise.all(
-      Array.from({ length: Math.min(CONCURRENCY, batchTexts.length) }, worker)
-    )
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(CONCURRENCY, chunks.length) || 1 }, worker)
+  )
 
-    // Surface the earliest-by-index failure (so the page range in the error is the
-    // first failing batch in page order); only merge rows when EVERY batch parsed.
-    const firstFailure = results.find((r) => !r.ok)
-    if (firstFailure && !firstFailure.ok) return firstFailure
+  // A model-call/network failure is a genuine API error worth surfacing — return
+  // the earliest one by index. Skipped (unparseable) pages are NOT failures here.
+  const firstFailure = results.find((r) => !r.ok)
+  if (firstFailure && !firstFailure.ok) return firstFailure
 
-    rawRows = []
-    for (const r of results) {
-      if (r.ok) rawRows.push(...r.rows)
+  const rawRows: Record<string, unknown>[] = []
+  const failedPages: number[] = []
+  for (const r of results) {
+    if (r.ok) {
+      rawRows.push(...r.rows)
+      failedPages.push(...r.failed)
     }
+  }
+  if (failedPages.length > 0) {
+    // Skipped pages don't fail the document — the other pages still extract.
+    console.warn(`[extract] skipped unparseable pages: ${failedPages.join(', ')}`)
   }
 
   // Post-process ONCE over the FULL original text so per-invoice page isolation,
