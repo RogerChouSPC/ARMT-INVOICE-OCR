@@ -158,8 +158,9 @@ The server computes tax_2 / tax_3 / netamount.`,
     vendorCode: 'vendor-no',
     vendorBranch: 'auto',
     notes: `vendor_customercode = the value printed in the "Vendor No" field.
-description = the รายการ value (e.g. "83-30: RD.Apr2026 มาม่าคัพ 80 ก. (ทุกรส) ปกติ 20 บาท").
+description = the รายการ value (e.g. "83-30: RD.Apr2026 มาม่าคัพ 80 ก. (ทุกรส) ปกติ 20 บาท", or "83-30: 1-30Jun2026 CDA Amb 2026").
 product_description = "" (this vendor has no separate product-detail field).
+Extract EVERY line item as its OWN row (do NOT pre-merge). CDA charges (CDA Amb / CDA Amb 2026 / CDA Chill) often repeat as many identical rows under one invoice — the server merges the identical CDA rows into one and sums their amounts.
 The server computes tax_2 / tax_3 / netamount.`,
   },
   {

@@ -983,6 +983,41 @@ export function postProcessRows(rawRows: Record<string, unknown>[], opts: PostPr
       })
     }
 
+    // PTT: a CDA charge (CDA Amb / CDA Amb 2026 (2.10%) / CDA Chill …) is often
+    // split into many IDENTICAL line items under one invoice. Merge rows that
+    // share the same invoiceno + description (only CDA rows) into ONE, summing
+    // amounts — the sum then equals the invoice's grand total. Non-CDA rows pass
+    // through unchanged. Runs BEFORE TAX_RULES so tax is computed on the total.
+    if (customerId === 'PTT') {
+      const num = (v: unknown) => parseFloat(String(v ?? '').replace(/,/g, '')) || 0
+      const out: Record<string, unknown>[] = []
+      const merged = new Map<string, Record<string, unknown>>()
+      for (const r of rows) {
+        const desc = String((r.description as string) ?? '')
+        if (!/CDA/i.test(desc)) { out.push(r); continue }
+        const key = [
+          String((r.invoiceno as string) ?? '').trim(),
+          desc.replace(/\s+/g, ' ').trim(),
+          String((r.product_description as string) ?? '').replace(/\s+/g, ' ').trim(),
+        ].join('|')
+        const existing = merged.get(key)
+        if (existing) {
+          existing.__sum = (existing.__sum as number) + num(r.amount)
+        } else {
+          const row = { ...r, __sum: num(r.amount) }
+          merged.set(key, row)
+          out.push(row)
+        }
+      }
+      rows = out.map((r) => {
+        if ('__sum' in r) {
+          const { __sum, ...rest } = r as Record<string, unknown>
+          return { ...rest, amount: (__sum as number).toFixed(2) }
+        }
+        return r
+      })
+    }
+
     // Withholding-tax calculation (classified per row from its description) for the
     // vendors that print only a grand-total / net-of-WHT figure. Verified against
     // each register. Per vendor: an "ad" keyword triggers the 2% rate; "ค่าปรับ"
