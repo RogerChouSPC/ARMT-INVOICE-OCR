@@ -199,6 +199,14 @@ function hasNonZeroVat(invoiceText: string): boolean {
  * page isolation, a document-level check would wrongly trigger calculations
  * for invoice A because VAT was found somewhere else in the document.
  */
+/** Thai SARA AM written as NIKHAHIT + SARA AA (U+0E4D U+0E32) — what Gemini's OCR
+ *  emits for จำ, ทำ, นำ … — collapsed to the single composed character U+0E33.
+ *  The two render identically but compare unequal, so registers typed by hand
+ *  never match the decomposed form. Unicode NFC does not do this for Thai. */
+function saraAm(s: string): string {
+  return s.replace(/ํา/g, 'ำ')
+}
+
 function getInvoicePageSection(invoiceText: string, invoiceNo: string): string {
   const PAGE_BREAK = '--- PAGE BREAK ---'
   if (!invoiceNo) return invoiceText
@@ -482,6 +490,8 @@ export interface PostProcessOpts {
   vendorBranch: string
   customerId: string
   customerMasterJson: string
+  /** Uploaded filename — LAWSON reads its division letter from it. */
+  filename?: string
 }
 
 /**
@@ -595,6 +605,7 @@ export async function extractRowsCore(input: ExtractCoreInput): Promise<ExtractC
     vendorBranch: input.vendorBranch,
     customerId: input.customerId,
     customerMasterJson: input.customerMasterJson,
+    filename: input.filename,
   })
   return { ok: true, rows }
 }
@@ -605,7 +616,7 @@ export async function extractRowsCore(input: ExtractCoreInput): Promise<ExtractC
  * over cached raw model output to evaluate post-processing changes at zero LLM cost.
  */
 export function postProcessRows(rawRows: Record<string, unknown>[], opts: PostProcessOpts): Record<string, unknown>[] {
-  const { text, vendorCode, vendorBranch, customerId, customerMasterJson } = opts
+  const { text, vendorCode, vendorBranch, customerId, customerMasterJson, filename = '' } = opts
   let rows = rawRows
 
     // Config-driven post-processing — deterministic overrides per customer.
@@ -1035,6 +1046,7 @@ export function postProcessRows(rawRows: Record<string, unknown>[], opts: PostPr
       AEON:   { ad: null,              penalty: false },  // always 3%, VAT 0% (vat_7 forced 0 above)
       BOOTS:  { ad: null,              penalty: false },  // always 3% (WHT printed on invoice; label as 3%)
       TSURUHA:{ ad: null,              penalty: false },  // always 3% on the merged "Total before Vat"
+      LAWSON: { ad: null,              penalty: false },  // always 3%; vat_7 stays as printed (0% or 7%)
     }
     const taxRule = TAX_RULES[customerId]
     if (taxRule) {
@@ -1052,6 +1064,74 @@ export function postProcessRows(rawRows: Record<string, unknown>[], opts: PostPr
           tax_2:     tax2.toFixed(2),
           tax_3:     tax3.toFixed(2),
           netamount: (amt + vat - tax2 - tax3).toFixed(2),
+        }
+      })
+    }
+
+    // Saha Lawson. Every rule below is taken from the ทะเบียนคุม register
+    // (2569 ทะเบียนคุม บจ.สห ลอว์สัน), verified against all 37 of its rows —
+    // not from the invoice layout, which prints more than the register books.
+    //
+    //   vendor_branch       always "00000" (the register's constant; the 604 /
+    //                       601 / 606 / 607 number under ใบแจ้งหนี้ is NOT used)
+    //   vendor_expensegroup the text after "Code :" ("Merchandising Dryfood" /
+    //                       "Fastfood" / "Nonfood"), per invoice page
+    //   divisionsale        the A/H/N/P letter in the FILENAME — Lawson issues one
+    //                       PDF per สหพัฒน์ division and writes the letter by hand
+    //                       top-right. Deterministic, unlike matching product names
+    //                       against divisionSales.ts, which mis-read ดอร์โค (→ N)
+    //                       as P and left the Campaign invoice (no product line) blank.
+    //   duedate             always blank — the register does not book it, even
+    //                       though the invoice prints a payment deadline
+    //   vat_7               printed value, blank when the invoice says VAT 0%
+    //   tax_pct/tax_2/tax_5 always blank (only TAX 3% is booked; see TAX_RULES)
+    //   vendor_expensecode  always blank
+    //   remark              always blank
+    if (customerId === 'LAWSON') {
+      // Exactly one standalone A/H/N/P in the filename, else leave the LLM's value.
+      const letters = [...filename.matchAll(/(?:^|[^A-Za-z0-9])([AHNP])(?=[^A-Za-z0-9]|$)/g)].map((m) => m[1])
+      const fileDivision = new Set(letters).size === 1 ? letters[0] : ''
+
+      rows = rows.map((r) => {
+        const page = getInvoicePageSection(text, (r.invoiceno as string) || '')
+        // OCR drops the "n" from "Merchandising" on some scans — normalise it.
+        const code = page.match(/Code\s*[:：]?\s*Merchan?dising\s+(\w+)/i)
+        const zero = (v: unknown) => {
+          const n = parseFloat(String(v ?? '').replace(/,/g, ''))
+          return !isNaN(n) && n === 0
+        }
+        // Two bits of page furniture sit close enough to the item cell that OCR
+        // reads them as extra product lines. Strip both, repeatedly, from the END
+        // only — they never appear mid-list:
+        //   "รวมเป็นเงิน 3,000.00"  the right-hand column header + the invoice
+        //       total. A genuine "… รวมเป็นเงิน 14,792.20 บาท" summary line inside
+        //       the cell keeps its trailing บาท, so requiring the end-of-string
+        //       leaves it alone.
+        //   "194876 07/69"          the italic running number and period printed
+        //       below the table's bottom-left corner.
+        let pdesc = saraAm(String((r.product_description as string) ?? ''))
+        for (let i = 0; i < 4; i++) {
+          const next = pdesc
+            .replace(/\s*รวมเป็นเงิน\s*[\d,]+\.\d{2}\s*$/, '')
+            .replace(/\s*\d{6}\s+\d{2}\/\d{2}\s*$/, '')
+            .trim()
+          if (next === pdesc) break
+          pdesc = next
+        }
+        return {
+          ...r,
+          description:         saraAm(String((r.description as string) ?? '')),
+          product_description: pdesc,
+          vendor_branch:       '00000',
+          vendor_expensecode:  '',
+          vendor_expensegroup: code ? `Merchandising ${code[1]}` : ((r.vendor_expensegroup as string) || ''),
+          divisionsale:        fileDivision || ((r.divisionsale as string) || ''),
+          duedate:             '',
+          vat_7:               zero(r.vat_7) ? '' : ((r.vat_7 as string) || ''),
+          tax_pct:             '',
+          tax_2:               '',
+          tax_5:               '',
+          remark:              '',
         }
       })
     }

@@ -1,13 +1,16 @@
 import { useState, useEffect } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { DropdownMenu } from 'radix-ui'
+import { CUSTOMER_RULES } from '@/config/customers'
 
-const CUSTOMERS = [
-  'Aeon', 'Big C', 'Big C Food', 'Boots', 'BTM',
-  'CFM', 'CFR', 'CFW', 'CJ', 'CMK', 'CP All',
-  'Foodland', 'HomePro', 'Lotus', 'Makro', 'PT', 'PTT',
-  'TFG', 'The Mall', 'Tsuruha', 'Villa', 'Watson',
-]
+// Derived from CUSTOMER_RULES so the landing page can never drift out of sync
+// with what the app actually supports — adding a customer there is enough.
+// Alphabetical (case-insensitive) rather than CUSTOMER_RULES' detection-priority order.
+const CUSTOMERS = CUSTOMER_RULES.map(r => r.displayName).sort((a, b) => a.localeCompare(b))
+
+// Widest name reserves the container width; recomputed instead of hard-coded so
+// a longer customer name added later can't clip the rotating text.
+const WIDEST = CUSTOMERS.reduce((a, b) => (b.length > a.length ? b : a), '')
 
 export default function CustomerCycle() {
   const reduceMotion = useReducedMotion()
@@ -30,7 +33,7 @@ export default function CustomerCycle() {
           hero heading (text-4xl / sm:text-5xl) so the rotating name balances it. */}
       <span className="relative flex justify-center overflow-hidden text-4xl sm:text-5xl font-bold tracking-tight leading-tight py-1">
         {/* invisible widest-name spacer gives the container correct width + height */}
-        <span className="invisible select-none" aria-hidden>Big C Food</span>
+        <span className="invisible select-none" aria-hidden>{WIDEST}</span>
 
         {reduceMotion ? (
           // Static single frame — visuals present, no looping motion.

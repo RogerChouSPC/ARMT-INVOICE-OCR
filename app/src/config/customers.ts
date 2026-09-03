@@ -29,6 +29,7 @@ export type VendorCodeSource =
 export interface CustomerRule {
   id: string
   label: string
+  displayName: string            // short brand name shown on the landing page (CustomerCycle)
   match: {
     filenameKeywords?: string[]  // matched (word-boundary) against the uploaded filename
     nameKeywords?: string[]      // matched against the invoice text
@@ -44,6 +45,7 @@ export const CUSTOMER_RULES: CustomerRule[] = [
   {
     id: 'CFR',
     label: 'Central Food Retail (CFR)',
+    displayName: 'CFR',
     match: { filenameKeywords: ['cfr'], nameKeywords: ['เซ็นทรัล ฟู้ด รีเทล'], taxids: ['0105535134278'] },
     extractMode: 'ocr',
     vendorCode: 'top-m-line',
@@ -60,6 +62,7 @@ remark = the COMPLETE หมายเหตุ note, verbatim. The note OFTEN WR
   {
     id: 'CMK',
     label: 'Central + Matsumoto Kiyoshi (CMK)',
+    displayName: 'CMK',
     match: { filenameKeywords: ['cmk'], nameKeywords: ['มัทสึโมโตะ', 'matsumoto'], taxids: ['0125558018410'] },
     extractMode: 'ocr',
     vendorCode: 'top-m-line',
@@ -72,6 +75,7 @@ vat_7 / tax_3 / netamount = copy the printed values ("บวกภาษีม�
   {
     id: 'CFM',
     label: 'Central Food (CFM)',
+    displayName: 'CFM',
     match: { filenameKeywords: ['cfm'], nameKeywords: ['เซ็นทรัลฟู้ด มินิมาร์เก็ต', 'central food minimart'], taxids: ['0105535133093'] },
     extractMode: 'ocr',
     vendorCode: 'customer-line',
@@ -88,6 +92,7 @@ The server strips any leftover "รายการ"/"สินค้า" label a
   {
     id: 'BTM',
     label: 'Beautrium (BTM)',
+    displayName: 'BTM',
     match: { filenameKeywords: ['btm'], nameKeywords: ['บิวเทรี่ยม', 'beautrium'], taxids: ['0105555002130'] },
     extractMode: 'text',
     vendorCode: 'customer-line',
@@ -99,6 +104,7 @@ product_description = the COMPLETE หมายเหตุ note verbatim (e.g. 
   {
     id: 'CFW',
     label: 'Central Food Wholesale (CFW)',
+    displayName: 'CFW',
     match: { filenameKeywords: ['cfw'], nameKeywords: ['เซ็นทรัล ฟู้ด โฮลเซลล์'], taxids: ['0125565034662'] },
     extractMode: 'text',
     vendorCode: 'customer-line',
@@ -110,6 +116,7 @@ product_description = "" (this vendor has no product-detail line).`,
   {
     id: 'BOOTS',
     label: 'Boots',
+    displayName: 'Boots',
     match: { filenameKeywords: ['boots'], nameKeywords: ['บู๊ทส์', 'boots retail'], taxids: ['0115539007084'] },
     extractMode: 'ocr',
     vendorCode: 'customer-line',
@@ -125,6 +132,7 @@ amount = the line "Amount". The server computes tax_3 (3%) and netamount.`,
   {
     id: 'CJ',
     label: 'CJ Express',
+    displayName: 'CJ',
     match: {
       filenameKeywords: ['cj'],
       nameKeywords: ['cj express', 'ซี.เจ. เอ็กซ์เพรส', 'ซี.เจ.เอ็กซ์เพรส'],
@@ -140,6 +148,7 @@ vat_7 = copy the printed VAT 7% value (often "0"); do NOT calculate. tax_2 / tax
   {
     id: 'FOODLAND',
     label: 'Foodland',
+    displayName: 'Foodland',
     match: { filenameKeywords: ['foodland'], nameKeywords: ['foodland', 'ฟู้ดแลนด์'], taxids: ['0105515004549'] },
     extractMode: 'ocr',
     vendorCode: 'ac-no',
@@ -153,6 +162,7 @@ The server computes tax_2 / tax_3 / netamount.`,
   {
     id: 'PTT',
     label: 'PTT',
+    displayName: 'PTT',
     match: { filenameKeywords: ['ptt'], nameKeywords: ['ปตท'], taxids: ['0105537121254'] },
     extractMode: 'ocr',
     vendorCode: 'vendor-no',
@@ -166,6 +176,7 @@ The server computes tax_2 / tax_3 / netamount.`,
   {
     id: 'THEMALL',
     label: 'The Mall / City Mall Group',
+    displayName: 'The Mall',
     match: {
       filenameKeywords: ['themall', 'em district', 'emdistrict', 'emporium', 'emquartier', 'emsphere', 'city mall', 'citymall'],
       nameKeywords: ['the mall', 'เดอะมอลล์', 'city mall', 'ซิตี้มอลล์', 'em district', 'emporium', 'emquartier', 'emsphere'],
@@ -191,6 +202,7 @@ Server calculates tax_2 / tax_3 / netamount — no need to extract them:
   {
     id: 'HOMEPRO',
     label: 'HomePro',
+    displayName: 'HomePro',
     match: { filenameKeywords: ['homepro'], nameKeywords: ['homepro', 'home product', 'โฮมโปร'], taxids: ['0107544000043'] },
     extractMode: 'ocr',
     vendorCode: 'customer-line',
@@ -202,6 +214,7 @@ product_description = "" (this vendor has no product-detail line).`,
   {
     id: 'LT',
     label: 'Lotus (LT)',
+    displayName: 'Lotus',
     match: {
       filenameKeywords: ['lt', 'lotus'],
       nameKeywords: ['โลตัส', 'lotus', 'นวมินทร์'],
@@ -265,6 +278,7 @@ GLOBAL — for ALL Lotus formats: invoiceno MUST match one of these shapes — "
   {
     id: 'MAKRO',
     label: 'Makro',
+    displayName: 'Makro',
     match: {
       filenameKeywords: ['makro', 'ซีพีแอ็กซ์ตร้า'],
       nameKeywords: ['makro', 'แม็คโคร', 'cp axtra', 'ซีพี แอ็กซ์ตร้า', 'ซีพีแอ็กซ์ตร้า'],
@@ -286,6 +300,7 @@ vat_7: calculate as amount × 0.07 for each line item (Makro prints only the tot
   {
     id: 'TFG',
     label: 'TFG',
+    displayName: 'TFG',
     match: { filenameKeywords: ['tfg'], nameKeywords: ['ไทยฟู้ด'] },
     extractMode: 'ocr',
     vendorCode: 'customer-line',
@@ -295,6 +310,7 @@ vat_7: calculate as amount × 0.07 for each line item (Makro prints only the tot
   {
     id: 'VILLA',
     label: 'Villa Market',
+    displayName: 'Villa',
     match: { filenameKeywords: ['villa'], nameKeywords: ['villa market', 'วิลล่า'] },
     extractMode: 'ocr',
     vendorCode: 'customer-line',
@@ -311,6 +327,7 @@ The server computes tax_2 / tax_3 / netamount.`,
   {
     id: 'WATSON',
     label: 'Watsons',
+    displayName: 'Watson',
     match: { filenameKeywords: ['watson', 'watsons'], nameKeywords: ['watson', 'วัตสัน'], taxids: ['0105539086260'] },
     extractMode: 'ocr',
     vendorCode: 'customer-line',
@@ -323,6 +340,7 @@ The server computes tax_3 / netamount.`,
   {
     id: 'PT',
     label: 'Petroleum Thai (PT)',
+    displayName: 'PT',
     match: { filenameKeywords: ['ปิโตรเลียม', 'petroleum'], nameKeywords: ['ปิโตรเลียมไทย', 'petroleum thai'], taxids: ['0105535099511'] },
     extractMode: 'ocr',
     vendorCode: 'customer-line',
@@ -336,6 +354,7 @@ The server computes tax_2 / tax_3 / netamount.`,
   {
     id: 'AEON',
     label: 'AEON (Thailand)',
+    displayName: 'Aeon',
     match: { filenameKeywords: ['aeon', 'อิออน'], nameKeywords: ['อิออน', 'aeon'], taxids: ['0105527044125'] },
     extractMode: 'ocr',
     vendorCode: 'customer-line',
@@ -351,6 +370,7 @@ Each row carries 3% withholding tax ("ภาษี ณ ที่จ่าย 3%"
   {
     id: 'TSURUHA',
     label: 'Tsuruha',
+    displayName: 'Tsuruha',
     match: { filenameKeywords: ['tsuruha'], nameKeywords: ['tsuruha', 'ซูรูฮะ'], taxids: ['0105554157903'] },
     extractMode: 'ocr',
     vendorCode: 'customer-line',
@@ -367,6 +387,7 @@ The server computes tax_3 (3% of amount) and netamount.`,
   {
     id: 'BIGC_FOOD',
     label: 'Big C Food Service',
+    displayName: 'Big C Food',
     match: {
       filenameKeywords: ['big c food', 'bigcfood', 'bigc_food'],
       nameKeywords: ['บิ๊กซี ฟู๊ด', 'บิ๊กซีฟู๊ด', 'บิ๊กซี ฟู้ด', 'big c food', 'bigc food'],
@@ -388,6 +409,7 @@ Server splits the cell automatically — you can put the whole cell in descripti
   {
     id: 'BIGC',
     label: 'Big C',
+    displayName: 'Big C',
     match: {
       filenameKeywords: ['big c', 'bigc', 'big-c'],
       nameKeywords: ['บิ๊กซีซูเปอร์เซ็นเตอร์', 'บิ๊กซี ซูเปอร์เซ็นเตอร์', 'big c supercenter', 'big c super center', 'บิ๊กซี', 'big c', 'bigc'],
@@ -409,6 +431,7 @@ Server splits the cell automatically — you can put the whole cell in descripti
   {
     id: 'CP_ALL',
     label: 'CP All (7-Eleven)',
+    displayName: 'CP All',
     match: {
       filenameKeywords: ['cp all', 'cpall', 'cp-all', 'cp_all', 'all speedy', 'allspeedy'],
       nameKeywords: ['ซีพี ออลล์', 'ซีพีออลล์', 'cp all', 'cpall', 'all speedy', 'ออลล์ สปีดดี้'],
@@ -417,6 +440,38 @@ Server splits the cell automatically — you can put the whole cell in descripti
     extractMode: 'auto',
     vendorCode: 'customer-line',
     vendorBranch: 'auto',
+  },
+  {
+    id: 'LAWSON',
+    label: 'Saha Lawson',
+    displayName: 'Lawson',
+    match: {
+      filenameKeywords: ['lawson', 'ลอว์สัน'],
+      nameKeywords: ['สห ลอว์สัน', 'saha lawson'],
+      taxids: ['0105555166337'],
+    },
+    // Scanned PDFs — the embedded text layer is completely empty (verified on
+    // all four 17-08-69 batch files: 44–330 chars, page-break markers only).
+    extractMode: 'ocr',
+    vendorCode: 'customer-line',
+    vendorBranch: 'blank',
+    notes: `vendor_customercode = the code at the START of the buyer line, immediately before "สหพัฒนพิบูล บมจ." — e.g. "M1111 สหพัฒนพิบูล บมจ. (มาม่า)" → "M1111". It CHANGES per invoice with the product group in the bracket (M1, M11, M1111, M1113, M1117, M1118, M1124, M1128, M1129, M1132, M2213 have all been seen). The same code is reprinted small at the BOTTOM-RIGHT of the page with a "B" suffix ("M1111B" → M1111) — use it to cross-check the OCR.
+taxid = 0105555166337 — the "VAT Reg. No." at the TOP-LEFT under the Lawson address. Do NOT use the "TAXID :0107537001421" printed in the middle of the page above the table; that is the BUYER's (สหพัฒนพิบูล) tax id.
+invoiceno = the "IN-YYMM-NNNN" code at the top right (e.g. "IN-2607-0061").
+invoicedate = the Thai date printed at the right, below the invoice number (e.g. "10 กรกฎาคม 2569" → 2026-07-10). Spelled-out Thai month, Buddhist year.
+duedate = "" — the server blanks it. Do not extract the payment-deadline date.
+description = the FIRST line of the รายการแจ้งหนี้ cell and nothing else — the charge title on the same row as the "ที่" number. Never append the line below it, however closely it reads as part of the same sentence. Examples (each is the whole description):
+  - "ค่าจัดรายการส่งเสริมการขายเดือนกรกฎาคม 2569"   ← the "เริ่ม 25 มิถุนายน 2569 - 24 กรกฎาคม 2569" line below it is product_description, NOT part of this
+  - "ยอดชดเชยส่วนลด Campaign"                      ← the quoted campaign name and its "เริ่ม …" period are product_description
+  - "Redemption Promotion Jun.( 25 May.26 - 24 Jun.26 )"
+  - "ค่าสื่อ Digital Signage มาม่า"
+  - "ค่าสนับสนุนสินค้าใหม่จำนวน 2 SKUs"
+product_description = EVERY remaining line of the รายการแจ้งหนี้ cell after that first line — this INCLUDES the "เริ่ม <date> - <date>" period line and any quoted campaign name, which come first, before the product names. Put each printed line on its own line — separate them with a real line break inside the JSON string (the two-character escape backslash-n), one printed line per output line, so the value reproduces the cell as it is laid out on the invoice. Do NOT join with spaces. Read every line — promotion invoices run to a dozen or more, including the per-item "ราคาปกติ … ชดเชย … บาท/ชิ้น จำนวน … = … บาท" calculation lines and the closing "เป็นจำนวนเงิน … บาท". Do NOT append the "รวมเป็นเงิน" column header or the amount printed in that right-hand column, and do NOT append the italic running number and period printed below the table's bottom-left corner (e.g. "194876" and "07/69") — none of those are product lines.
+amount = the "รวมเป็นเงินก่อน VAT" figure. On an invoice that spans several pages this block is printed ONLY on the LAST page (หน้า N/N) — the earlier pages have no totals block at all. Always take it from that last page.
+vat_7 = copy the figure printed on the "VAT 0%" / "VAT 7%" line exactly, whatever the rate says; do NOT calculate it. Most invoices read "VAT 0%" with 0.00, but some (e.g. ค่าสื่อ / Digital Signage charges) genuinely carry VAT 7% — copy the printed amount there. The server blanks a zero.
+netamount / tax_3 = leave to the server; it computes tax_3 = amount × 3% and netamount = amount + vat_7 − tax_3.
+vendor_branch / vendor_expensecode / vendor_expensegroup / remark = leave "" — the server fills vendor_branch and vendor_expensegroup itself.
+NOTE — multi-page invoices: a single invoice can run onto further pages ("หน้า 1/2 … 2/2", "หน้า 1/4 … 4/4"). Only the FIRST page carries the "ที่" number and the charge line; only the LAST page carries the totals block. Emit ONE row per invoiceno: description from the first page, amount and VAT from the last page, and every page's product lines appended in order to product_description. Never emit a second row for a continuation page.`,
   },
 ]
 

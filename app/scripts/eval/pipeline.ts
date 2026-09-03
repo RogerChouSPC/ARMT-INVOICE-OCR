@@ -101,6 +101,7 @@ export async function runPdf(pdfPath: string, apiKey: string): Promise<PipelineR
       vendorBranch: effRule?.vendorBranch ?? 'auto',
       customerId: (effRule?.id ?? '').toUpperCase(),
       customerMasterJson,
+      filename,
     })
     return base
   } catch (err) {

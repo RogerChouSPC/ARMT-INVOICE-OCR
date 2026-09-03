@@ -43,6 +43,7 @@ export const CUSTOMER_MASTER_SEED: CustomerMasterSeedRow[] = [
   { store_name: 'วัตสัน', customergroup: '17 - วัตสัน', customercode: '0301152 - บริษัท เซ็นทรัล วัตสัน จำกัด สำนักงานใหญ่', taxid: '0105539086260' },
   { store_name: 'บู๊ทส์ รีเทล', customergroup: '19 - บู๊ทส์ รีเทล', customercode: '0301958 - บ.บู๊ทส์ รีเทล (ประเทศไทย) จก. สำนักงานใหญ่', taxid: '0115539007084' },
   { store_name: 'ปตท', customergroup: '25 - ปตท (Jiffy)', customercode: '0051460 - บริษัท ปตท. บริหารธุรกิจค้าปลีก จำกัด สำนักงานใหญ่', taxid: '0105537121254' },
+  { store_name: 'สห ลอว์สัน', customergroup: '39 - สห ลอว์สัน', customercode: '0115283 - บริษัท สห ลอว์สัน จำกัด สำนักงานใหญ่', taxid: '0105555166337' },
   { store_name: 'ซูรูฮะ', customergroup: '46 - ซูรูฮะ', customercode: '0113748 - บริษัท ซูรูฮะ(ประเทศไทย) จำกัด สำนักงานใหญ่', taxid: '0105554157903' },
   { store_name: 'ซี.เจ. เอ็กซ์เพรส', customergroup: '47 - ซี.เจ.เอ็กซ์เพรส', customercode: '0076746 - บริษัท ซี.เจ. เอ็กซ์เพรส กรุ๊ป จำกัด สำนักงานใหญ่', taxid: '0105556055491' },
   { store_name: 'บิ๊กซี ฟู๊ด', customergroup: '68 - เอ็มเอ็ม เมก้า มาร์เก็ต', customercode: '0116224 - บริษัท บิ๊กซี ฟู๊ด เซอร์วิส จำกัด สำนักงานใหญ่', taxid: '0105563176541' },
