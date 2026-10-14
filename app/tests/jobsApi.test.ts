@@ -490,6 +490,30 @@ test('done status adds result rows and error status adds only its safe stored er
   assert.equal('rows' in errorRes.body, false)
 })
 
+test('done metadata with a concurrently removed result returns owner-private not found', async (t) => {
+  const { root, store, handlers } = await fixture(t)
+  const done = await store.create('owner-a', storedRequest, Buffer.from('%PDF-test'))
+  await store.writeResult(done.id, { rows: [{ invoiceno: 'must-not-become-blank-success' }] })
+  await store.updateMetadata(done.id, { stage: 'done' })
+  const originalReadMetadata = store.readMetadata.bind(store)
+  let removed = false
+  store.readMetadata = async (id) => {
+    const metadata = await originalReadMetadata(id)
+    if (!removed && metadata?.stage === 'done') {
+      removed = true
+      await rm(join(root, id, 'result.json'), { force: true })
+    }
+    return metadata
+  }
+  const res = responseRecorder()
+
+  await handlers.getJob(request({}, { jobId: done.id }), res.response)
+
+  assert.equal(res.code, 404)
+  assert.deepEqual(res.body, { error: 'Not found' })
+  assert.equal('rows' in res.body, false)
+})
+
 test('job runtime config applies production defaults and validates numeric environment values', () => {
   assert.deepEqual(readJobsRuntimeConfig({}), {
     jobConcurrency: 1,

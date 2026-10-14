@@ -367,7 +367,9 @@ async function retryTransient<T>(
 
 function isTransient(error: unknown): boolean {
   if (typeof error !== 'object' || error === null) return false
-  const status = Number((error as { status?: unknown }).status)
+  const classified = error as { status?: unknown; retryable?: unknown }
+  if (typeof classified.retryable === 'boolean') return classified.retryable
+  const status = Number(classified.status)
   if (Number.isFinite(status)) {
     return status === 429 || (status >= 500 && status <= 599)
   }

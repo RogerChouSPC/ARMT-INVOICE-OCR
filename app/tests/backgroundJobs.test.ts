@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import * as backgroundJobsModule from '../src/api/backgroundJobs'
 import {
   createActiveJobRegistry,
   createBackgroundJob,
@@ -261,6 +262,100 @@ test('two network errors back off for two then five seconds without changing job
   assert.deepEqual(registry.list(), [
     { jobId: 'j1', filename: 'x.pdf', pagesTotal: 277, delivered: false },
   ])
+})
+
+test('transient 429 and 5xx responses back off then deliver one result', async () => {
+  const storage = memoryStorage()
+  const registry = createActiveJobRegistry(storage)
+  registry.save({ jobId: 'j1', filename: 'x.pdf', pagesTotal: 277 })
+  const replies = [
+    response(429, { error: 'busy' }),
+    response(503, { error: 'temporarily unavailable' }),
+    response(200, doneStatus),
+  ]
+  const delays: number[] = []
+  const delivered: unknown[][] = []
+
+  const terminal = await pollBackgroundJob('j1', async () => 'token', {
+    registry,
+    fetchImpl: async () => replies.shift()!,
+    sleep: async ms => { delays.push(ms) },
+    onResult: rows => { delivered.push(rows) },
+  })
+
+  assert.equal(terminal.status, 'done')
+  assert.deepEqual(delays, [2000, 5000])
+  assert.deepEqual(delivered, [[{ invoiceno: 'INV-1' }]])
+})
+
+test('malformed JSON and status schemas are transient polling failures', async () => {
+  const replies = [
+    new Response('{not-json', { status: 200, headers: { 'Content-Type': 'application/json' } }),
+    response(200, { jobId: 'j1', status: 'ocr' }),
+    response(200, doneStatus),
+  ]
+  const delays: number[] = []
+  let deliveries = 0
+
+  const terminal = await pollBackgroundJob('j1', async () => 'token', {
+    fetchImpl: async () => replies.shift()!,
+    sleep: async ms => { delays.push(ms) },
+    onResult: () => { deliveries++ },
+  })
+
+  assert.equal(terminal.status, 'done')
+  assert.deepEqual(delays, [2000, 5000])
+  assert.equal(deliveries, 1)
+})
+
+test('a stable 404 is a typed unavailable outcome and leaves cleanup to the UI commit', async () => {
+  const storage = memoryStorage()
+  const registry = createActiveJobRegistry(storage)
+  registry.save({ jobId: 'j1', filename: 'x.pdf', pagesTotal: 277 })
+  const delays: number[] = []
+  let requests = 0
+  const isUnavailable = Reflect.get(
+    backgroundJobsModule,
+    'isBackgroundJobUnavailableError',
+  ) as ((error: unknown) => boolean) | undefined
+  assert.equal(typeof isUnavailable, 'function')
+
+  await assert.rejects(
+    () => pollBackgroundJob('j1', async () => 'token', {
+      registry,
+      fetchImpl: async () => {
+        requests++
+        return response(404, { error: 'Not found' })
+      },
+      sleep: async ms => { delays.push(ms) },
+    }),
+    error => isUnavailable!(error)
+      && error instanceof Error
+      && /no longer available/i.test(error.message),
+  )
+
+  assert.equal(requests, 1)
+  assert.deepEqual(delays, [])
+  assert.equal(registry.list().length, 1)
+})
+
+test('abort during transient HTTP backoff stops before another request', async () => {
+  const controller = new AbortController()
+  let requests = 0
+
+  await assert.rejects(
+    () => pollBackgroundJob('j1', async () => 'token', {
+      signal: controller.signal,
+      fetchImpl: async () => {
+        requests++
+        return response(500, { error: 'temporary' })
+      },
+      sleep: async () => { controller.abort() },
+    }),
+    error => error instanceof DOMException && error.name === 'AbortError',
+  )
+
+  assert.equal(requests, 1)
 })
 
 test('an abort signal stops browser polling without removing the saved reference', async () => {

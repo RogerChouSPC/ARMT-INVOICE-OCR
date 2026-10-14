@@ -214,7 +214,7 @@ read (OCR vs direct text) and what extraction instructions are sent to the AI.
 | API keys         | Stored as server environment variables, never in source code |
 | Data persistence | Large-job inputs/checkpoints/results live in a named volume for 24 hours |
 | Access control   | Any valid Microsoft account in the tenant can log in         |
-| Input validation | Invoice text truncated to 40,000 chars before sending to AI  |
+| Input validation | Each extraction model call is capped at 750,000 input-text characters |
 
 ### Environment Variables Required
 
@@ -271,8 +271,9 @@ server applies a deterministic override based on the customer config:
 
 ### Known Limitations
 
-- Invoice text is truncated at **40,000 characters** per extraction call —
-  extremely long multi-invoice documents may still lose later content
+- Each extraction model call is capped at **750,000 input-text characters**.
+  The extraction core normally sends eight-page chunks, so the cap applies to
+  each chunk or recursive retry, not to the whole background job
 - AI extraction accuracy depends on OCR quality for scanned PDFs
 - Model responses are non-deterministic (temperature 0.1 for extract, 0 for
   OCR) — rare edge cases may differ slightly on retry
@@ -340,8 +341,8 @@ Pricing is per token (1 token ≈ 0.75 words in English, less for Thai).
 
 | Scenario                                | Status                                                    |
 | --------------------------------------- | --------------------------------------------------------- |
-| Multiple users uploading simultaneously | Supported — limited by the server's CPU / memory          |
-| Bulk upload (10–20 files at once)       | Supported — files processed sequentially per user         |
+| Multiple users uploading simultaneously | Supported — one active large job by default, with the rest queued |
+| Bulk upload (10–20 files at once)       | Supported — large jobs are processed sequentially by the single app instance |
 | Multi-page file                         | >25 pages use persistent background jobs and bounded ranges |
 | 500 invoices/month                      | Comfortably within free/pro tier                          |
 | 5,000 invoices/month                    | Supported — AI cost increases linearly (~$20–40 AI cost)  |
@@ -350,17 +351,30 @@ Pricing is per token (1 token ≈ 0.75 words in English, less for Thai).
 
 | Bottleneck                       | Threshold                            | Mitigation                                              |
 | -------------------------------- | ------------------------------------ | ------------------------------------------------------- |
-| Server CPU / memory              | Sustained heavy concurrent load      | Increase the VM size, or run multiple containers behind a load balancer |
+| Server CPU / memory              | Sustained heavy concurrent load      | Increase CPU/RAM on the single active app instance       |
 | OpenRouter rate limits           | ~60 requests/min                     | Keep job concurrency at 1; bounded OCR already retries transient failures |
-| Extract text truncation          | 40,000 chars (very large documents)  | Chunk text by page and merge multiple extract calls     |
+| Extract call input cap           | 750,000 chars per model call         | Preserve page breaks; split any unusually dense page/chunk before extraction |
 | Job-volume capacity              | Temporary PDF/checkpoint growth      | Monitor `armt-job-data`; terminal jobs expire after 24 hours |
 
 ### Horizontal Scaling
 
-The app runs as a Docker container, so it does not auto-scale on its own.
-For higher load, run multiple containers behind a reverse proxy / load
-balancer, or move the container to a larger server. For the expected
-accounting-team volume, a single container on a modest VM is sufficient.
+Run exactly **one active app container** and scale it vertically. The queue,
+active-job deduplication, and concurrency limit are process-local, while job
+ownership, checkpoints, and results are filesystem records without a
+cross-process claim or lease.
+
+Multiple active containers are unsafe today:
+
+- With one shared volume, each process can recover and execute the same job,
+  bypass the global concurrency limit, and race on metadata/checkpoint/result
+  files.
+- With separate volumes, a poll routed to another container reports a valid job
+  as missing, and restart recovery sees only the jobs on that container.
+
+Do not place multiple active containers behind a load balancer until the job
+store is distributed and workers use an atomic claim/lease with renewal and
+expiry. For the expected accounting-team volume, a single vertically sized
+container is the supported deployment.
 
 ---
 
@@ -419,10 +433,14 @@ container) to store extraction history with timestamps, user, and file name.
 **Recommendation:** Move the customer rule table to a database or admin UI so business users can manage it.
 **Effort:** Medium (2–4 days)
 
-### Limitation 5 — Extract Text Truncation at 40,000 Characters
+### Limitation 5 — 750,000-Character Per-Call Extraction Cap
 
-**Issue:** Extremely long multi-invoice documents may still have content cut off.
-**Recommendation:** Chunk text by page and make multiple sequential extract calls; merge results.
+**Issue:** `buildExtractMessages()` caps the invoice-text portion of each model
+call at 750,000 characters. Normal extraction already works in eight-page
+chunks, but an unusually dense chunk or text without usable page-break markers
+can still be truncated.
+**Recommendation:** Detect an oversized chunk before the model call, split it
+at page or safe text boundaries, and merge results in source order.
 **Effort:** Medium (1–2 days)
 
 ### Limitation 6 — No ERP Integration

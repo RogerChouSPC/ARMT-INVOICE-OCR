@@ -2,6 +2,22 @@ import type { InvoiceRow } from '../types/invoice'
 
 export const ACTIVE_PDF_JOBS_STORAGE_KEY = 'armt_active_pdf_jobs_v1'
 const DEFAULT_JOB_ERROR = 'Job processing failed. Please try again.'
+const UNAVAILABLE_JOB_ERROR = 'This background job is no longer available. Please upload the PDF again.'
+
+export class BackgroundJobUnavailableError extends Error {
+  constructor() {
+    super(UNAVAILABLE_JOB_ERROR)
+    this.name = 'BackgroundJobUnavailableError'
+  }
+}
+
+export function isBackgroundJobUnavailableError(
+  error: unknown,
+): error is BackgroundJobUnavailableError {
+  return error instanceof BackgroundJobUnavailableError
+}
+
+class UnexpectedBackgroundJobIdError extends Error {}
 
 export type BackgroundJobStage =
   | 'queued'
@@ -160,7 +176,7 @@ export async function pollBackgroundJob(
   let token = await getToken()
   throwIfAborted(options.signal)
   let refreshedAfterUnauthorized = false
-  let consecutiveNetworkErrors = 0
+  let consecutiveTransientErrors = 0
 
   while (true) {
     throwIfAborted(options.signal)
@@ -174,8 +190,8 @@ export async function pollBackgroundJob(
       throwIfAborted(options.signal)
     } catch (error) {
       if (options.signal?.aborted || isAbortError(error)) throw abortError()
-      consecutiveNetworkErrors++
-      await sleep(consecutiveNetworkErrors === 1 ? 2000 : 5000)
+      consecutiveTransientErrors++
+      await sleep(consecutiveTransientErrors === 1 ? 2000 : 5000)
       throwIfAborted(options.signal)
       continue
     }
@@ -186,14 +202,34 @@ export async function pollBackgroundJob(
       token = await getToken()
       continue
     }
+    if (response.status === 404) {
+      throw new BackgroundJobUnavailableError()
+    }
+    if (response.status === 429 || response.status >= 500) {
+      await response.body?.cancel().catch(() => {})
+      consecutiveTransientErrors++
+      await sleep(consecutiveTransientErrors === 1 ? 2000 : 5000)
+      throwIfAborted(options.signal)
+      continue
+    }
     if (!response.ok) {
       throw new Error(await responseError(response, 'Unable to read job'))
     }
 
-    const body: unknown = await response.json()
-    throwIfAborted(options.signal)
-    const status = parseBackgroundJobStatus(body, jobId)
-    consecutiveNetworkErrors = 0
+    let status: BackgroundJobStatus
+    try {
+      const body: unknown = await response.json()
+      throwIfAborted(options.signal)
+      status = parseBackgroundJobStatus(body, jobId)
+    } catch (error) {
+      if (options.signal?.aborted || isAbortError(error)) throw abortError()
+      if (error instanceof UnexpectedBackgroundJobIdError) throw error
+      consecutiveTransientErrors++
+      await sleep(consecutiveTransientErrors === 1 ? 2000 : 5000)
+      throwIfAborted(options.signal)
+      continue
+    }
+    consecutiveTransientErrors = 0
     await options.onStatus?.(status)
     throwIfAborted(options.signal)
 
@@ -241,6 +277,11 @@ function parseActiveJobs(raw: string | null): ActiveBackgroundJob[] {
 }
 
 function parseBackgroundJobStatus(value: unknown, expectedJobId: string): BackgroundJobStatus {
+  if (isRecord(value)
+    && typeof value.jobId === 'string'
+    && value.jobId !== expectedJobId) {
+    throw new UnexpectedBackgroundJobIdError('Unable to read job: invalid response')
+  }
   if (!isRecord(value)
     || typeof value.jobId !== 'string'
     || value.jobId !== expectedJobId

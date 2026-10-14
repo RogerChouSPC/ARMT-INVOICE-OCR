@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, open, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { JobMetadata, JobResult, JobStore, StoredJobRequest } from './jobTypes'
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const UUID_TEXT = '[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}'
+const UUID_PATTERN = new RegExp(`^${UUID_TEXT}$`, 'i')
+const STAGING_PATTERN = new RegExp(`^\\.${UUID_TEXT}\\.${UUID_TEXT}\\.tmp$`, 'i')
 const RECOVERABLE_STAGES = new Set(['queued', 'rendering', 'ocr', 'extracting'])
 const TERMINAL_STAGES = new Set(['done', 'error'])
 const DEFAULT_RETENTION_MS = 24 * 60 * 60 * 1000
@@ -18,11 +20,11 @@ class FileJobStore implements JobStore {
   constructor(private readonly rootDir: string) {}
 
   async create(ownerId: string, request: StoredJobRequest, inputPdf: Buffer): Promise<JobMetadata> {
-    await mkdir(this.rootDir, { recursive: true })
+    await mkdir(this.rootDir, { recursive: true, mode: 0o700 })
     const id = randomUUID()
     const jobDir = this.jobDir(id)
     const stagingDir = join(this.rootDir, `.${id}.${randomUUID()}.tmp`)
-    await mkdir(stagingDir, { recursive: false })
+    await mkdir(stagingDir, { recursive: false, mode: 0o700 })
     const storedRequest: StoredJobRequest = {
       filename: request.filename, pageCount: request.pageCount, text: request.text, isDigital: request.isDigital,
       useOcr: request.useOcr, customerMaster: request.customerMaster, customerId: request.customerId,
@@ -46,7 +48,7 @@ class FileJobStore implements JobStore {
 
     try {
       await this.writeJsonAtomic(join(stagingDir, 'request.json'), storedRequest)
-      await writeFile(join(stagingDir, 'input.pdf'), new Uint8Array(inputPdf))
+      await writeFile(join(stagingDir, 'input.pdf'), new Uint8Array(inputPdf), { mode: 0o600 })
       await this.writeJsonAtomic(join(stagingDir, 'metadata.json'), metadata)
       await rename(stagingDir, jobDir)
       return metadata
@@ -99,8 +101,8 @@ class FileJobStore implements JobStore {
 
   async writeOcrPage(id: string, page: number, text: string): Promise<void> {
     const path = this.ocrPagePath(id, page)
-    await mkdir(join(this.jobDir(id), 'ocr'), { recursive: true })
-    await writeFile(path, text, 'utf8')
+    await mkdir(join(this.jobDir(id), 'ocr'), { recursive: true, mode: 0o700 })
+    await this.writeTextAtomic(path, text)
   }
 
   async readOcrPage(id: string, page: number): Promise<string | null> {
@@ -167,6 +169,22 @@ class FileJobStore implements JobStore {
     }
 
     await Promise.all(entries
+      .filter((entry) => entry.isDirectory() && STAGING_PATTERN.test(entry.name))
+      .map(async (entry) => {
+        const stagingPath = join(this.rootDir, entry.name)
+        let stagingStat: Awaited<ReturnType<typeof lstat>>
+        try {
+          stagingStat = await lstat(stagingPath)
+        } catch (error) {
+          if (isNotFound(error)) return
+          throw error
+        }
+        if (!stagingStat.isDirectory()) return
+        if (now.getTime() - stagingStat.mtimeMs <= retentionMs) return
+        await rm(stagingPath, { recursive: true, force: true })
+      }))
+
+    await Promise.all(entries
       .filter((entry) => entry.isDirectory() && UUID_PATTERN.test(entry.name))
       .map(async (entry) => {
         const metadata = await this.readMetadata(entry.name)
@@ -188,9 +206,24 @@ class FileJobStore implements JobStore {
   }
 
   private async writeJsonAtomic(path: string, value: unknown): Promise<void> {
+    await this.writeTextAtomic(path, JSON.stringify(value))
+  }
+
+  private async writeTextAtomic(path: string, value: string): Promise<void> {
     const temporaryPath = `${path}.${randomUUID()}.tmp`
-    await writeFile(temporaryPath, JSON.stringify(value), 'utf8')
-    await rename(temporaryPath, path)
+    let handle: Awaited<ReturnType<typeof open>> | undefined
+    try {
+      handle = await open(temporaryPath, 'wx', 0o600)
+      await handle.writeFile(value, 'utf8')
+      await handle.sync()
+      await handle.close()
+      handle = undefined
+      await rename(temporaryPath, path)
+    } catch (error) {
+      if (handle) await handle.close().catch(() => {})
+      await rm(temporaryPath, { force: true }).catch(() => {})
+      throw error
+    }
   }
 }
 

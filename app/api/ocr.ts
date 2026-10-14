@@ -1,4 +1,9 @@
 import type { Request, Response } from 'express'
+import {
+  openRouterHttpFailure,
+  openRouterNetworkFailure,
+  type OpenRouterFailure,
+} from './openRouterErrors'
 import { verifyAzureToken } from './verifyToken'
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
@@ -6,7 +11,17 @@ const MODEL = 'google/gemini-2.5-flash'
 
 export type OcrCoreResult =
   | { ok: true; text: string }
-  | { ok: false; status: number; error: string }
+  | ({ ok: false } & OpenRouterFailure)
+
+export function ocrFailureForWorker(
+  page: number,
+  failure: OpenRouterFailure,
+): Error & { status: number; retryable: boolean } {
+  return Object.assign(
+    new Error(`OCR failed on page ${page}. Please try again.`),
+    { status: failure.status, retryable: failure.retryable },
+  )
+}
 
 /**
  * Pure OCR core: base64 PNG → Gemini Vision → raw text.  No auth/env/Express
@@ -41,19 +56,15 @@ export async function ocrImageCore(image: string, apiKey: string): Promise<OcrCo
     })
 
     if (!apiRes.ok) {
-      const errText = await apiRes.text()
-      if (apiRes.status === 429) {
-        return { ok: false, status: 429, error: 'API quota exceeded. Please try again shortly.' }
-      }
-      return { ok: false, status: 502, error: `OpenRouter ${apiRes.status}: ${errText.slice(0, 300)}` }
+      await apiRes.body?.cancel().catch(() => {})
+      return { ok: false, ...openRouterHttpFailure('OCR', apiRes.status) }
     }
 
     const data = await apiRes.json()
     const text: string = data?.choices?.[0]?.message?.content ?? ''
     return { ok: true, text }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    return { ok: false, status: 502, error: message }
+  } catch {
+    return { ok: false, ...openRouterNetworkFailure('OCR') }
   }
 }
 

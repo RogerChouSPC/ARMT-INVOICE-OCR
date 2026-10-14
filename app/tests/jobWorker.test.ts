@@ -259,7 +259,12 @@ test('retries transient extraction from zero batch progress without repeating OC
       ])
       if (attempts === 1) {
         onProgress(1, 2)
-        return { ok: false, status: 502, error: 'temporary upstream body' }
+        return {
+          ok: false,
+          status: 502,
+          error: 'temporary upstream body',
+          retryable: true,
+        }
       }
       onProgress(1, 1)
       return { ok: true, rows: [{ invoiceno: 'INV-2' }] }
@@ -276,6 +281,57 @@ test('retries transient extraction from zero batch progress without repeating OC
   assert.deepEqual(ocrCalls, [1, 2])
   assert.deepEqual(setup.sleepCalls, [2000])
   assert.equal((await setup.store.readMetadata(setup.job.id))?.stage, 'done')
+})
+
+test('an explicit non-retryable upstream failure is attempted once despite its public 502 status', async (t) => {
+  let attempts = 0
+  const { store, worker, job, sleepCalls } = await fixture(t, {
+    pageCount: 1,
+    request: { text: 'digital', isDigital: true, useOcr: false },
+    extract: async () => {
+      attempts++
+      return {
+        ok: false,
+        status: 502,
+        error: 'safe deterministic upstream rejection',
+        retryable: false,
+      } as ExtractCoreResult
+    },
+  })
+
+  worker.enqueue(job.id)
+  await worker.waitForIdle()
+
+  assert.equal(attempts, 1)
+  assert.deepEqual(sleepCalls, [])
+  assert.equal((await store.readMetadata(job.id))?.stage, 'error')
+})
+
+test('an explicit retryable upstream failure retries then completes', async (t) => {
+  let attempts = 0
+  const { store, worker, job, sleepCalls } = await fixture(t, {
+    pageCount: 1,
+    request: { text: 'digital', isDigital: true, useOcr: false },
+    extract: async () => {
+      attempts++
+      if (attempts === 1) {
+        return {
+          ok: false,
+          status: 502,
+          error: 'safe transient upstream failure',
+          retryable: true,
+        } as ExtractCoreResult
+      }
+      return { ok: true, rows: [{ invoiceno: 'recovered' }] }
+    },
+  })
+
+  worker.enqueue(job.id)
+  await worker.waitForIdle()
+
+  assert.equal(attempts, 2)
+  assert.deepEqual(sleepCalls, [2000])
+  assert.equal((await store.readMetadata(job.id))?.stage, 'done')
 })
 
 test('does not retry a deterministic status-less extraction error', async (t) => {

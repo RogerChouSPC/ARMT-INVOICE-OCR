@@ -1,5 +1,10 @@
 import type { Request, Response } from 'express'
 import { divisionSalesPromptBlock } from './divisionSales'
+import {
+  openRouterHttpFailure,
+  openRouterNetworkFailure,
+  type OpenRouterFailure,
+} from './openRouterErrors'
 import { verifyAzureToken } from './verifyToken'
 
 // Customer rules live in src/config/customers.ts (single source of truth, used by
@@ -436,7 +441,7 @@ export interface ExtractCoreInput {
 
 export type ExtractCoreResult =
   | { ok: true; rows: Record<string, unknown>[] }
-  | { ok: false; status: number; error: string }
+  | ({ ok: false } & OpenRouterFailure)
 
 /** Chat messages sent to the extraction model. Exported so the eval harness can
  *  build an identical prompt for cache-keying without duplicating the format. */
@@ -452,7 +457,7 @@ export function buildExtractMessages(
 
 export type ModelCallResult =
   | { ok: true; content: string }
-  | { ok: false; status: number; error: string }
+  | ({ ok: false } & OpenRouterFailure)
 
 export interface ExtractProgress {
   completedBatches: number
@@ -483,17 +488,14 @@ export async function callExtractModel(
     })
 
     if (!apiRes.ok) {
-      const errText = await apiRes.text()
-      if (apiRes.status === 429) {
-        return { ok: false, status: 429, error: 'API quota exceeded. Please try again shortly.' }
-      }
-      return { ok: false, status: 502, error: `OpenRouter ${apiRes.status}: ${errText.slice(0, 300)}` }
+      await apiRes.body?.cancel().catch(() => {})
+      return { ok: false, ...openRouterHttpFailure('Extraction', apiRes.status) }
     }
 
     const data = await apiRes.json()
     return { ok: true, content: data?.choices?.[0]?.message?.content || '[]' }
-  } catch (err) {
-    return { ok: false, status: 500, error: err instanceof Error ? err.message : String(err) }
+  } catch {
+    return { ok: false, ...openRouterNetworkFailure('Extraction') }
   }
 }
 
@@ -526,7 +528,13 @@ async function extractPageSlice(
 ): Promise<{ rows: Record<string, unknown>[]; failed: number[] }> {
   const text = pages.join('\n\n--- PAGE BREAK ---\n\n')
   const call = await callModel(buildExtractMessages({ ...input, text }), input.apiKey)
-  if (!call.ok) throw Object.assign(new Error(call.error), { status: call.status, error: call.error })
+  if (!call.ok) {
+    throw Object.assign(new Error(call.error), {
+      status: call.status,
+      error: call.error,
+      retryable: call.retryable,
+    })
+  }
   try {
     return { rows: parseJsonFromText(call.content) as Record<string, unknown>[], failed: [] }
   } catch {
@@ -535,6 +543,12 @@ async function extractPageSlice(
       const retry = await callModel(buildExtractMessages({ ...input, text }), input.apiKey)
       if (retry.ok) {
         try { return { rows: parseJsonFromText(retry.content) as Record<string, unknown>[], failed: [] } } catch { /* fall through */ }
+      } else {
+        throw Object.assign(new Error(retry.error), {
+          status: retry.status,
+          error: retry.error,
+          retryable: retry.retryable,
+        })
       }
       return { rows: [], failed: [pageOffset + 1] } // 1-based page number, skipped
     }
@@ -568,7 +582,7 @@ export async function extractRowsCore(
 
   type ChunkResult =
     | { ok: true; rows: Record<string, unknown>[]; failed: number[] }
-    | { ok: false; status: number; error: string }
+    | ({ ok: false } & OpenRouterFailure)
 
   // Order-preserving bounded pool (same shape as the pool in api/ocrPdf.ts):
   // at most `n` workers pull from a shared index, writing results by index.
@@ -585,11 +599,12 @@ export async function extractRowsCore(
         const { rows, failed } = await extractPageSlice(chunks[i], input, i * BATCH, callModel)
         results[i] = { ok: true, rows, failed }
       } catch (err) {
-        const e = err as { status?: number; error?: string }
+        const e = err as { status?: number; error?: string; retryable?: boolean }
         results[i] = {
           ok: false,
           status: e.status ?? 502,
           error: e.error ?? (err instanceof Error ? err.message : String(err)),
+          retryable: e.retryable ?? false,
         }
       }
       completed++

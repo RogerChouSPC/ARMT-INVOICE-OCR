@@ -154,7 +154,11 @@ export function createJobsHandlers({ store, worker, verify }: JobsHandlerDepende
       const response = publicStatus(metadata)
       if (metadata.stage === 'done') {
         const result = await store.readResult(jobId)
-        res.status(200).json({ ...response, rows: result?.rows ?? [] })
+        if (!result) {
+          res.status(404).json({ error: 'Not found' })
+          return
+        }
+        res.status(200).json({ ...response, rows: result.rows })
         return
       }
       res.status(200).json(response)

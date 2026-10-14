@@ -7,7 +7,7 @@ import paymentAdviceHandler from '../api/paymentAdvice.ts'
 import { createJobsHandlers, readJobsRuntimeConfig, registerJobsRoutes } from '../api/jobs.ts'
 import { createJobStore } from '../api/jobStore.ts'
 import { createJobWorker } from '../api/jobWorker.ts'
-import { ocrImageCore } from '../api/ocr.ts'
+import { ocrFailureForWorker, ocrImageCore } from '../api/ocr.ts'
 import { getPdfPageCount, renderPdfPageRange } from '../api/pdfRaster.ts'
 import { verifyAzureToken } from '../api/verifyToken.ts'
 
@@ -24,10 +24,7 @@ const jobWorker = createJobWorker({
   async ocrPage(image, page, apiKey) {
     const result = await ocrImageCore(image, apiKey)
     if (!result.ok) {
-      throw Object.assign(
-        new Error(`OCR failed on page ${page}. Please try again.`),
-        { status: result.status },
-      )
+      throw ocrFailureForWorker(page, result)
     }
     return result.text
   },

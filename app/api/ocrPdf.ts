@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express'
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ocrImageCore } from './ocr.ts'
@@ -52,15 +52,15 @@ export default async function handler(req: Request, res: Response) {
     return res.status(400).json({ error: 'Expected { pdf: base64string }' })
   }
 
-  const uploadDir = mkdtempSync(join(tmpdir(), 'armt-ocrpdf-upload-'))
+  const uploadDir = await mkdtemp(join(tmpdir(), 'armt-ocrpdf-upload-'))
   try {
     const pdfPath = join(uploadDir, 'in.pdf')
-    writeFileSync(pdfPath, new Uint8Array(pdfBytes))
-    const totalPages = getPdfPageCount(pdfPath)
+    await writeFile(pdfPath, new Uint8Array(pdfBytes))
+    const totalPages = await getPdfPageCount(pdfPath)
     const texts: string[] = []
 
     for (const { startPage, endPage } of pageRanges(totalPages, OCR_RENDER_BATCH_PAGES)) {
-      const pages = renderPdfPageRange(pdfPath, startPage, endPage)
+      const pages = await renderPdfPageRange(pdfPath, startPage, endPage)
       const batchTexts = await pool(pages, OCR_CONCURRENCY, async ({ page, pngBase64 }) => {
         const r = await ocrImageCore(pngBase64, apiKey)
         if (!r.ok) throw new Error(`page ${page}: ${r.error}`)
@@ -73,6 +73,6 @@ export default async function handler(req: Request, res: Response) {
   } catch (err) {
     return res.status(500).json({ error: err instanceof Error ? err.message : String(err) })
   } finally {
-    rmSync(uploadDir, { recursive: true, force: true })
+    await rm(uploadDir, { recursive: true, force: true })
   }
 }

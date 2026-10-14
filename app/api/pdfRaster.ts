@@ -1,7 +1,8 @@
-import { execFileSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { execFile } from 'node:child_process'
+import { access, mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { promisify } from 'node:util'
 
 const DPI = Number(process.env.OCR_RASTER_DPI || 200)
 
@@ -48,60 +49,93 @@ export function sortRenderedPageNames(names: string[]): Array<{ filename: string
     .sort((a, b) => a.page - b.page)
 }
 
-let cachedPdftoppm: string | null = null
-let cachedPdfInfo: string | null = null
+const execFileAsync = promisify(execFile)
+let cachedPdftoppm: Promise<string> | null = null
+let cachedPdfInfo: Promise<string> | null = null
 
-function findWinGetPopplerBinary(filename: string): string | null {
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await access(path)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function findWinGetPopplerBinary(filename: string): Promise<string | null> {
   const base = join(process.env.LOCALAPPDATA || '', 'Microsoft', 'WinGet', 'Packages')
-  if (!existsSync(base)) return null
+  if (!(await pathExists(base))) return null
 
-  for (const pkg of readdirSync(base)) {
+  for (const pkg of await readdir(base)) {
     if (!pkg.toLowerCase().includes('poppler')) continue
     const pkgDir = join(base, pkg)
-    for (const sub of readdirSync(pkgDir)) {
+    for (const sub of await readdir(pkgDir)) {
       const candidate = join(pkgDir, sub, 'Library', 'bin', filename)
-      if (existsSync(candidate)) return candidate
+      if (await pathExists(candidate)) return candidate
     }
   }
   return null
 }
 
-function findPdftoppm(): string {
+async function findPdftoppm(): Promise<string> {
   if (cachedPdftoppm) return cachedPdftoppm
-  if (process.env.POPPLER_PDFTOPPM && existsSync(process.env.POPPLER_PDFTOPPM)) {
-    return (cachedPdftoppm = process.env.POPPLER_PDFTOPPM)
-  }
-  return (cachedPdftoppm = findWinGetPopplerBinary('pdftoppm.exe') || 'pdftoppm')
+  cachedPdftoppm = (async () => {
+    if (process.env.POPPLER_PDFTOPPM && await pathExists(process.env.POPPLER_PDFTOPPM)) {
+      return process.env.POPPLER_PDFTOPPM
+    }
+    return await findWinGetPopplerBinary('pdftoppm.exe') || 'pdftoppm'
+  })()
+  return cachedPdftoppm
 }
 
-function findPdfInfo(): string {
+async function findPdfInfo(): Promise<string> {
   if (cachedPdfInfo) return cachedPdfInfo
-  if (process.env.POPPLER_PDFINFO && existsSync(process.env.POPPLER_PDFINFO)) {
-    return (cachedPdfInfo = process.env.POPPLER_PDFINFO)
-  }
-  return (cachedPdfInfo = findWinGetPopplerBinary('pdfinfo.exe') || 'pdfinfo')
+  cachedPdfInfo = (async () => {
+    if (process.env.POPPLER_PDFINFO && await pathExists(process.env.POPPLER_PDFINFO)) {
+      return process.env.POPPLER_PDFINFO
+    }
+    return await findWinGetPopplerBinary('pdfinfo.exe') || 'pdfinfo'
+  })()
+  return cachedPdfInfo
 }
 
-export function getPdfPageCount(pdfPath: string): number {
-  const output = execFileSync(findPdfInfo(), [pdfPath], {
+export async function getPdfPageCount(pdfPath: string): Promise<number> {
+  const { stdout } = await execFileAsync(await findPdfInfo(), [pdfPath], {
     encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsHide: true,
   })
-  return parsePdfInfoPages(output)
+  return parsePdfInfoPages(String(stdout))
 }
 
-export function renderPdfPageRange(pdfPath: string, startPage: number, endPage: number): RenderedPage[] {
-  if (!Number.isInteger(startPage) || !Number.isInteger(endPage) || startPage < 1 || startPage > endPage) {
-    throw new Error('PDF page range must use integers with 1 <= start <= end')
-  }
-  if (endPage - startPage + 1 > 10) {
-    throw new Error('PDF page range must contain at most 10 pages')
-  }
+export interface RasterCommand {
+  executable: string
+  argsPrefix: string[]
+}
 
-  const dir = mkdtempSync(join(tmpdir(), 'armt-ocrpdf-range-'))
+export async function renderPdfPageRange(
+  pdfPath: string,
+  startPage: number,
+  endPage: number,
+): Promise<RenderedPage[]> {
+  validatePdfPageRange(startPage, endPage)
+  return renderPdfPageRangeWithCommand(pdfPath, startPage, endPage, {
+    executable: await findPdftoppm(),
+    argsPrefix: [],
+  })
+}
+
+export async function renderPdfPageRangeWithCommand(
+  pdfPath: string,
+  startPage: number,
+  endPage: number,
+  command: RasterCommand,
+): Promise<RenderedPage[]> {
+  validatePdfPageRange(startPage, endPage)
+  const dir = await mkdtemp(join(tmpdir(), 'armt-ocrpdf-range-'))
   try {
     const outputPrefix = join(dir, 'page')
-    execFileSync(findPdftoppm(), [
+    await execFileAsync(command.executable, [
+      ...command.argsPrefix,
       '-png',
       '-r', String(DPI),
       '-f', String(startPage),
@@ -109,17 +143,27 @@ export function renderPdfPageRange(pdfPath: string, startPage: number, endPage: 
       pdfPath,
       outputPrefix,
     ], {
-      stdio: 'pipe',
+      encoding: 'utf8',
       maxBuffer: 512 * 1024 * 1024,
+      windowsHide: true,
     })
 
-    return sortRenderedPageNames(
-      readdirSync(dir).filter((filename) => filename.toLowerCase().endsWith('.png')),
-    ).map(({ filename, page }) => ({
+    const names = (await readdir(dir))
+      .filter((filename) => filename.toLowerCase().endsWith('.png'))
+    return Promise.all(sortRenderedPageNames(names).map(async ({ filename, page }) => ({
       page,
-      pngBase64: readFileSync(join(dir, filename)).toString('base64'),
-    }))
+      pngBase64: (await readFile(join(dir, filename))).toString('base64'),
+    })))
   } finally {
-    rmSync(dir, { recursive: true, force: true })
+    await rm(dir, { recursive: true, force: true })
+  }
+}
+
+function validatePdfPageRange(startPage: number, endPage: number): void {
+  if (!Number.isInteger(startPage) || !Number.isInteger(endPage) || startPage < 1 || startPage > endPage) {
+    throw new Error('PDF page range must use integers with 1 <= start <= end')
+  }
+  if (endPage - startPage + 1 > 10) {
+    throw new Error('PDF page range must contain at most 10 pages')
   }
 }

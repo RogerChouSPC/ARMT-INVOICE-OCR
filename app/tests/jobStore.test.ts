@@ -1,8 +1,19 @@
 import assert from 'node:assert/strict'
-import { access, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  utimes,
+  writeFile,
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
+import { fileURLToPath } from 'node:url'
 import { createJobStore } from '../api/jobStore'
 import type { StoredJobRequest } from '../api/jobTypes'
 
@@ -21,6 +32,8 @@ async function makeRoot(t: FixtureTestContext): Promise<string> {
   t.after(async () => rm(root, { recursive: true, force: true }))
   return root
 }
+
+const appDir = join(fileURLToPath(new URL('.', import.meta.url)), '..')
 
 test('create persists queued metadata, request, and input without credentials', async (t) => {
   const root = await makeRoot(t)
@@ -102,6 +115,42 @@ test('OCR pages round-trip and completed page numbers are sorted', async (t) => 
   assert.equal(await store.readOcrPage(created.id, 10), 'page ten')
 })
 
+test('OCR checkpoints replace the final file atomically and ignore interrupted artifacts', async (t) => {
+  const root = await makeRoot(t)
+  const store = createJobStore(root)
+  const created = await store.create('owner-1', request, Buffer.from('%PDF-test'))
+  const ocrDir = join(root, created.id, 'ocr')
+
+  await store.writeOcrPage(created.id, 1, 'old durable text')
+  const before = await stat(join(ocrDir, '000001.txt'))
+  await writeFile(join(ocrDir, '000002.txt.11111111-1111-4111-8111-111111111111.tmp'), 'partial')
+  await writeFile(join(ocrDir, '000003.txt.partial'), 'partial')
+  await store.writeOcrPage(created.id, 1, 'new durable text')
+  const after = await stat(join(ocrDir, '000001.txt'))
+
+  assert.notEqual(after.ino, before.ino, 'checkpoint replacement must use rename, not overwrite in place')
+  assert.deepEqual(await store.listCompletedOcrPages(created.id), [1])
+  assert.equal(await store.readOcrPage(created.id, 1), 'new durable text')
+  assert.equal(await store.readOcrPage(created.id, 2), null)
+})
+
+test('failed OCR checkpoint replacement cleans its same-directory temp file', async (t) => {
+  const root = await makeRoot(t)
+  const store = createJobStore(root)
+  const created = await store.create('owner-1', request, Buffer.from('%PDF-test'))
+  const ocrDir = join(root, created.id, 'ocr')
+  await mkdir(ocrDir, { recursive: true })
+  await mkdir(join(ocrDir, '000004.txt'))
+
+  await assert.rejects(store.writeOcrPage(created.id, 4, 'must not survive'))
+
+  assert.deepEqual(
+    (await readdir(ocrDir)).filter(name => name.endsWith('.tmp')),
+    [],
+  )
+  assert.deepEqual(await store.listCompletedOcrPages(created.id), [])
+})
+
 test('readMetadata rejects path traversal job ids', async (t) => {
   const root = await makeRoot(t)
   const store = createJobStore(root)
@@ -144,4 +193,51 @@ test('cleanupExpired defaults retention to 24 hours', async (t) => {
   await store.cleanupExpired(new Date('2026-10-14T00:00:00.000Z'))
 
   assert.equal((await store.readMetadata(done.id))?.stage, 'done')
+})
+
+test('cleanup scavenges only aged valid staging directories', async (t) => {
+  const root = await makeRoot(t)
+  const store = createJobStore(root)
+  const oldStaging = '.11111111-1111-4111-8111-111111111111.22222222-2222-4222-8222-222222222222.tmp'
+  const freshStaging = '.33333333-3333-4333-8333-333333333333.44444444-4444-4444-8444-444444444444.tmp'
+  const malformedStaging = '.not-a-job.55555555-5555-4555-8555-555555555555.tmp'
+  const unrelated = 'operator-notes'
+  for (const name of [oldStaging, freshStaging, malformedStaging, unrelated]) {
+    await mkdir(join(root, name))
+    await writeFile(join(root, name, 'private-data'), 'preserve unless valid and old', 'utf8')
+  }
+  const oldTime = new Date('2026-10-12T00:00:00.000Z')
+  await utimes(join(root, oldStaging), oldTime, oldTime)
+  await utimes(join(root, malformedStaging), oldTime, oldTime)
+  await utimes(join(root, unrelated), oldTime, oldTime)
+  const freshTime = new Date('2026-10-13T23:30:00.000Z')
+  await utimes(join(root, freshStaging), freshTime, freshTime)
+
+  await store.cleanupExpired(new Date('2026-10-14T00:00:00.000Z'), 24 * 60 * 60 * 1000)
+
+  await assert.rejects(access(join(root, oldStaging)))
+  await access(join(root, freshStaging, 'private-data'))
+  await access(join(root, malformedStaging, 'private-data'))
+  await access(join(root, unrelated, 'private-data'))
+})
+
+test('job directories and persisted files are private where POSIX modes are supported', async (t) => {
+  const root = await makeRoot(t)
+  const store = createJobStore(root)
+  const created = await store.create('owner-1', request, Buffer.from('%PDF-private'))
+  if (process.platform === 'win32') return
+
+  const jobDir = join(root, created.id)
+  assert.equal((await stat(jobDir)).mode & 0o077, 0)
+  for (const filename of ['metadata.json', 'request.json', 'input.pdf']) {
+    assert.equal((await stat(join(jobDir, filename))).mode & 0o077, 0)
+  }
+})
+
+test('private job data is excluded from Git and the Docker build context', async () => {
+  const gitIgnore = (await readFile(join(appDir, '..', '.gitignore'), 'utf8')).split(/\r?\n/)
+  const dockerIgnore = (await readFile(join(appDir, '.dockerignore'), 'utf8')).split(/\r?\n/)
+
+  assert.ok(gitIgnore.includes('app/job-data/'))
+  assert.ok(dockerIgnore.includes('job-data/'))
 })

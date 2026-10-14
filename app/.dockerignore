@@ -1,5 +1,6 @@
 node_modules
 dist
+job-data/
 .git
 .env
 .env.local

@@ -18,6 +18,7 @@ import { exportToExcel } from '@/utils/excelExporter'
 import {
   createActiveJobRegistry,
   createBackgroundJob,
+  isBackgroundJobUnavailableError,
   pollBackgroundJob,
   runBackgroundJobsInOrder,
   type BackgroundJobStage,
@@ -187,6 +188,9 @@ export default function App() {
         if (isAbortError(pollError)) throw pollError
         const message = pollError instanceof Error ? pollError.message : 'Unknown error'
         updateJobStatus(job.jobId, { state: 'error', error: message })
+        if (isBackgroundJobUnavailableError(pollError)) {
+          scheduleJobRemoval(job.jobId)
+        }
       }
     }
 
@@ -239,6 +243,7 @@ export default function App() {
       })))
 
       await runBackgroundJobsInOrder(files, async (file, i) => {
+        let backgroundJobId: string | undefined
         try {
           updateStatus(i, { state: 'rendering', progress: 15 })
           const { text: pdfText, isDigital, pageCount } = await extractPdfText(file)
@@ -273,6 +278,7 @@ export default function App() {
               customerMaster,
               ...customerPayload,
             }, getToken)
+            backgroundJobId = created.jobId
             activeJobRegistry.save({
               jobId: created.jobId,
               filename: file.name,
@@ -391,6 +397,9 @@ export default function App() {
           if (isAbortError(processingError)) throw processingError
           const message = processingError instanceof Error ? processingError.message : 'Unknown error'
           updateStatus(i, { state: 'error', error: message })
+          if (backgroundJobId && isBackgroundJobUnavailableError(processingError)) {
+            scheduleJobRemoval(backgroundJobId)
+          }
         }
       }, controller.signal)
     } catch (processingError) {
