@@ -1,6 +1,7 @@
 import type { InvoiceRow } from '../types/invoice'
 
 export const ACTIVE_PDF_JOBS_STORAGE_KEY = 'armt_active_pdf_jobs_v1'
+const DEFAULT_JOB_ERROR = 'Job processing failed. Please try again.'
 
 export type BackgroundJobStage =
   | 'queued'
@@ -84,6 +85,10 @@ export function createActiveJobRegistry(storage: Storage): ActiveJobRegistry {
   const write = (jobs: ActiveBackgroundJob[]) => {
     storage.setItem(ACTIVE_PDF_JOBS_STORAGE_KEY, JSON.stringify(jobs))
   }
+  const restored = read()
+  if (restored.some(job => job.delivered)) {
+    write(restored.map(job => ({ ...job, delivered: false })))
+  }
 
   return {
     list: read,
@@ -153,6 +158,7 @@ export async function pollBackgroundJob(
   const fetchImpl = options.fetchImpl ?? fetch
   const sleep = options.sleep ?? delay
   let token = await getToken()
+  throwIfAborted(options.signal)
   let refreshedAfterUnauthorized = false
   let consecutiveNetworkErrors = 0
 
@@ -165,6 +171,7 @@ export async function pollBackgroundJob(
         headers: requestHeaders(token, false),
         signal: options.signal,
       })
+      throwIfAborted(options.signal)
     } catch (error) {
       if (options.signal?.aborted || isAbortError(error)) throw abortError()
       consecutiveNetworkErrors++
@@ -183,9 +190,12 @@ export async function pollBackgroundJob(
       throw new Error(await responseError(response, 'Unable to read job'))
     }
 
-    const status = parseBackgroundJobStatus(await response.json())
+    const body: unknown = await response.json()
+    throwIfAborted(options.signal)
+    const status = parseBackgroundJobStatus(body, jobId)
     consecutiveNetworkErrors = 0
     await options.onStatus?.(status)
+    throwIfAborted(options.signal)
 
     if (status.status === 'done') {
       if (options.onResult && (!options.registry || options.registry.claimResult(jobId))) {
@@ -197,6 +207,18 @@ export async function pollBackgroundJob(
 
     await sleep(2000)
     throwIfAborted(options.signal)
+  }
+}
+
+export async function runBackgroundJobsInOrder<T>(
+  jobs: readonly T[],
+  run: (job: T, index: number) => Promise<void>,
+  signal?: AbortSignal,
+): Promise<void> {
+  for (let index = 0; index < jobs.length; index++) {
+    throwIfAborted(signal)
+    await run(jobs[index], index)
+    throwIfAborted(signal)
   }
 }
 
@@ -218,9 +240,10 @@ function parseActiveJobs(raw: string | null): ActiveBackgroundJob[] {
   }
 }
 
-function parseBackgroundJobStatus(value: unknown): BackgroundJobStatus {
+function parseBackgroundJobStatus(value: unknown, expectedJobId: string): BackgroundJobStatus {
   if (!isRecord(value)
     || typeof value.jobId !== 'string'
+    || value.jobId !== expectedJobId
     || typeof value.filename !== 'string'
     || !isBackgroundJobStage(value.status)
     || !isNonNegativeInteger(value.pagesDone)
@@ -240,6 +263,11 @@ function parseBackgroundJobStatus(value: unknown): BackgroundJobStatus {
     extractBatchesDone: value.extractBatchesDone,
     extractBatchesTotal: value.extractBatchesTotal,
   }
+  const error = value.status === 'error'
+    ? (typeof value.error === 'string' && value.error.trim().length > 0
+        ? value.error.trim()
+        : DEFAULT_JOB_ERROR)
+    : value.error
   return {
     jobId: value.jobId,
     filename: value.filename,
@@ -251,7 +279,7 @@ function parseBackgroundJobStatus(value: unknown): BackgroundJobStatus {
     progress: jobProgressPercent(progress),
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
-    error: value.error,
+    error,
     ...(Array.isArray(value.rows) ? { rows: value.rows as Partial<InvoiceRow>[] } : {}),
   }
 }

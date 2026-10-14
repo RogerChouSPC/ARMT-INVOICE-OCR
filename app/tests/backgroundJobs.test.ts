@@ -5,6 +5,7 @@ import {
   createBackgroundJob,
   jobProgressPercent,
   pollBackgroundJob,
+  runBackgroundJobsInOrder,
 } from '../src/api/backgroundJobs'
 
 function memoryStorage(): Storage {
@@ -48,6 +49,19 @@ test('active job registry survives recreation and claims a result once', () => {
   assert.deepEqual(restored.list().map(x => x.jobId), ['j1'])
   assert.equal(restored.claimResult('j1'), true)
   assert.equal(restored.claimResult('j1'), false)
+})
+
+test('a new registry lifecycle recovers a claimed entry left persisted', () => {
+  const storage = memoryStorage()
+  const previousPage = createActiveJobRegistry(storage)
+  previousPage.save({ jobId: 'j1', filename: 'x.pdf', pagesTotal: 277 })
+  assert.equal(previousPage.claimResult('j1'), true)
+  assert.equal(previousPage.list()[0].delivered, true)
+
+  const reloadedPage = createActiveJobRegistry(storage)
+
+  assert.equal(reloadedPage.list()[0].delivered, false)
+  assert.equal(reloadedPage.claimResult('j1'), true)
 })
 
 test('active job registry filters malformed storage without crashing', () => {
@@ -126,6 +140,48 @@ test('polling returns rows at done and waits two seconds after a running status'
   assert.deepEqual(terminal.rows, [{ invoiceno: 'INV-1' }])
 })
 
+test('polling rejects a status for a different job before delivering rows', async () => {
+  const storage = memoryStorage()
+  const registry = createActiveJobRegistry(storage)
+  registry.save({ jobId: 'j1', filename: 'x.pdf', pagesTotal: 277 })
+  const delivered: unknown[][] = []
+
+  await assert.rejects(
+    () => pollBackgroundJob('j1', async () => 'token', {
+      registry,
+      fetchImpl: async () => response(200, { ...doneStatus, jobId: 'different-job' }),
+      sleep: async () => {},
+      onResult: rows => { delivered.push(rows) },
+    }),
+    /invalid response/i,
+  )
+
+  assert.deepEqual(delivered, [])
+  assert.equal(registry.list()[0].delivered, false)
+})
+
+test('terminal error statuses always expose a safe nonblank message', async (t) => {
+  for (const serverError of [null, '   ']) {
+    await t.test(serverError === null ? 'null error' : 'blank error', async () => {
+      const seen: Array<string | null> = []
+      const terminal = await pollBackgroundJob('j1', async () => 'token', {
+        fetchImpl: async () => response(200, {
+          ...doneStatus,
+          status: 'error',
+          pagesDone: 83,
+          error: serverError,
+          rows: undefined,
+        }),
+        sleep: async () => {},
+        onStatus: status => { seen.push(status.error) },
+      })
+
+      assert.equal(terminal.error, 'Job processing failed. Please try again.')
+      assert.deepEqual(seen, ['Job processing failed. Please try again.'])
+    })
+  }
+})
+
 test('two pollers sharing the registry deliver completed rows once', async () => {
   const storage = memoryStorage()
   const registry = createActiveJobRegistry(storage)
@@ -140,7 +196,7 @@ test('two pollers sharing the registry deliver completed rows once', async () =>
       onResult: rows => { delivered.push(rows) },
     }),
     pollBackgroundJob('j1', async () => 'token', {
-      registry: createActiveJobRegistry(storage),
+      registry,
       fetchImpl: async () => response(200, doneStatus),
       sleep: async () => {},
       onResult: rows => { delivered.push(rows) },
@@ -228,4 +284,86 @@ test('an abort signal stops browser polling without removing the saved reference
   assert.deepEqual(registry.list(), [
     { jobId: 'j1', filename: 'x.pdf', pagesTotal: 277, delivered: false },
   ])
+})
+
+test('polling rechecks lifecycle after fetch before applying a terminal response', async () => {
+  const storage = memoryStorage()
+  const registry = createActiveJobRegistry(storage)
+  registry.save({ jobId: 'j1', filename: 'x.pdf', pagesTotal: 277 })
+  const controller = new AbortController()
+  const delivered: unknown[][] = []
+
+  await assert.rejects(
+    () => pollBackgroundJob('j1', async () => 'token', {
+      registry,
+      signal: controller.signal,
+      fetchImpl: async () => {
+        controller.abort()
+        return response(200, doneStatus)
+      },
+      sleep: async () => {},
+      onResult: rows => { delivered.push(rows) },
+    }),
+    error => error instanceof DOMException && error.name === 'AbortError',
+  )
+
+  assert.deepEqual(delivered, [])
+  assert.equal(registry.list()[0].delivered, false)
+})
+
+test('polling rechecks lifecycle after status delivery before claiming result rows', async () => {
+  const storage = memoryStorage()
+  const registry = createActiveJobRegistry(storage)
+  registry.save({ jobId: 'j1', filename: 'x.pdf', pagesTotal: 277 })
+  const controller = new AbortController()
+  const delivered: unknown[][] = []
+
+  await assert.rejects(
+    () => pollBackgroundJob('j1', async () => 'token', {
+      registry,
+      signal: controller.signal,
+      fetchImpl: async () => response(200, doneStatus),
+      sleep: async () => {},
+      onStatus: async () => { controller.abort() },
+      onResult: rows => { delivered.push(rows) },
+    }),
+    error => error instanceof DOMException && error.name === 'AbortError',
+  )
+
+  assert.deepEqual(delivered, [])
+  assert.equal(registry.list()[0].delivered, false)
+})
+
+test('ordered job orchestration aborts the enclosing lifecycle before later work starts', async () => {
+  const controller = new AbortController()
+  const started: number[] = []
+
+  await assert.rejects(
+    () => runBackgroundJobsInOrder([1, 2], async item => {
+      started.push(item)
+      controller.abort()
+    }, controller.signal),
+    error => error instanceof DOMException && error.name === 'AbortError',
+  )
+
+  assert.deepEqual(started, [1])
+})
+
+test('restored jobs deliver in saved registry order rather than response timing order', async () => {
+  let releaseFirst = () => {}
+  const firstCanFinish = new Promise<void>(resolve => { releaseFirst = resolve })
+  const started: string[] = []
+  const delivered: string[] = []
+
+  const restoring = runBackgroundJobsInOrder(['j1', 'j2'], async jobId => {
+    started.push(jobId)
+    if (jobId === 'j1') await firstCanFinish
+    delivered.push(jobId)
+  })
+  await Promise.resolve()
+
+  assert.deepEqual(started, ['j1'])
+  releaseFirst()
+  await restoring
+  assert.deepEqual(delivered, ['j1', 'j2'])
 })
