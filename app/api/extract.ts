@@ -454,6 +454,19 @@ export type ModelCallResult =
   | { ok: true; content: string }
   | { ok: false; status: number; error: string }
 
+export interface ExtractProgress {
+  completedBatches: number
+  totalBatches: number
+}
+
+export interface ExtractCoreOptions {
+  onProgress?: (progress: ExtractProgress) => void
+  callModel?: (
+    messages: { role: string; content: string }[],
+    apiKey: string
+  ) => Promise<ModelCallResult>
+}
+
 /** The raw OpenRouter call: messages → model content string (un-parsed). */
 export async function callExtractModel(
   messages: { role: string; content: string }[],
@@ -509,29 +522,33 @@ async function extractPageSlice(
   pages: string[],
   input: ExtractCoreInput,
   pageOffset: number, // 0-based index of pages[0] within the full document, for logging
+  callModel: NonNullable<ExtractCoreOptions['callModel']>,
 ): Promise<{ rows: Record<string, unknown>[]; failed: number[] }> {
   const text = pages.join('\n\n--- PAGE BREAK ---\n\n')
-  const call = await callExtractModel(buildExtractMessages({ ...input, text }), input.apiKey)
+  const call = await callModel(buildExtractMessages({ ...input, text }), input.apiKey)
   if (!call.ok) throw Object.assign(new Error(call.error), { status: call.status, error: call.error })
   try {
     return { rows: parseJsonFromText(call.content) as Record<string, unknown>[], failed: [] }
   } catch {
     if (pages.length === 1) {
       // Retry the single page ONCE (models are non-deterministic), then skip it.
-      const retry = await callExtractModel(buildExtractMessages({ ...input, text }), input.apiKey)
+      const retry = await callModel(buildExtractMessages({ ...input, text }), input.apiKey)
       if (retry.ok) {
         try { return { rows: parseJsonFromText(retry.content) as Record<string, unknown>[], failed: [] } } catch { /* fall through */ }
       }
       return { rows: [], failed: [pageOffset + 1] } // 1-based page number, skipped
     }
     const mid = Math.ceil(pages.length / 2)
-    const a = await extractPageSlice(pages.slice(0, mid), input, pageOffset)
-    const b = await extractPageSlice(pages.slice(mid), input, pageOffset + mid)
+    const a = await extractPageSlice(pages.slice(0, mid), input, pageOffset, callModel)
+    const b = await extractPageSlice(pages.slice(mid), input, pageOffset + mid, callModel)
     return { rows: [...a.rows, ...b.rows], failed: [...a.failed, ...b.failed] }
   }
 }
 
-export async function extractRowsCore(input: ExtractCoreInput): Promise<ExtractCoreResult> {
+export async function extractRowsCore(
+  input: ExtractCoreInput,
+  options: ExtractCoreOptions = {},
+): Promise<ExtractCoreResult> {
   // Large PDFs (e.g. a 37-page Makro register) overflow the model's output token
   // budget when sent in one shot, truncating the JSON → parse throws → blank.
   // Batch by page so each call's output stays within max_tokens. A batch whose
@@ -558,12 +575,14 @@ export async function extractRowsCore(input: ExtractCoreInput): Promise<ExtractC
   // A model-call failure (network/429/5xx) thrown by extractPageSlice becomes a
   // returned failure; a JSON-parse failure is recovered inside extractPageSlice.
   const results: ChunkResult[] = new Array(chunks.length)
+  const callModel = options.callModel ?? callExtractModel
   let next = 0
+  let completed = 0
   async function worker() {
     while (next < chunks.length) {
       const i = next++
       try {
-        const { rows, failed } = await extractPageSlice(chunks[i], input, i * BATCH)
+        const { rows, failed } = await extractPageSlice(chunks[i], input, i * BATCH, callModel)
         results[i] = { ok: true, rows, failed }
       } catch (err) {
         const e = err as { status?: number; error?: string }
@@ -573,6 +592,8 @@ export async function extractRowsCore(input: ExtractCoreInput): Promise<ExtractC
           error: e.error ?? (err instanceof Error ? err.message : String(err)),
         }
       }
+      completed++
+      options.onProgress?.({ completedBatches: completed, totalBatches: chunks.length })
     }
   }
   await Promise.all(
