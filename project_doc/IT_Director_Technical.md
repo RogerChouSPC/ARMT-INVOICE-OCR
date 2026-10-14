@@ -15,8 +15,8 @@ Audience: IT Director / System Administrator / Lead Developer
 │  React SPA (Vite build, served by the Express server)         │
 │  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌───────────┐  │
 │  │  PDF.js    │ │  MSAL.js   │ │  SheetJS   │ │  Customer │  │
-│  │ (parse +   │ │ (Azure AD  │ │  (xlsx     │ │  config + │  │
-│  │  render)   │ │   auth)    │ │  export)   │ │ detection)│  │
+│  │ (text +    │ │ (Azure AD  │ │  (xlsx     │ │  config + │  │
+│  │ page count)│ │   auth)    │ │  export)   │ │ detection)│  │
 │  └────────────┘ └────────────┘ └────────────┘ └───────────┘  │
 └───────────────────────────┬───────────────────────────────────┘
                             │ HTTPS
@@ -24,6 +24,7 @@ Audience: IT Director / System Administrator / Lead Developer
               │  COMPANY SERVER (Docker)   │
               │  Express server (Node.js)  │
               │  /api/ocr      route       │
+              │  /api/ocr-pdf  route       │
               │  /api/extract  route       │
               │  /api/jobs     routes      │
               └──────────┬──────────────────┘
@@ -54,7 +55,7 @@ Browser ──► Microsoft Azure AD (login.microsoftonline.com)
 | Styling       | Tailwind CSS        | 3.4.17  | Utility-first CSS                   |
 | UI primitives | Radix UI            | 1.4.3   | Accessible components               |
 | Animation     | Framer Motion       | 12.38.0 | UI transitions, background paths    |
-| PDF engine    | PDF.js (pdfjs-dist) | 4.9.155 | Client-side PDF parsing + rendering |
+| PDF engine    | PDF.js (pdfjs-dist) | 4.9.155 | Client-side text/page inspection    |
 | Excel export  | SheetJS (xlsx)      | 0.18.5  | Generate .xlsx in browser           |
 | Auth client   | @azure/msal-browser | 5.10.1  | Microsoft SSO                       |
 
@@ -73,15 +74,16 @@ and built frontend. It runs inside a Docker container. Entry point:
 | Route                       | File             | Purpose                                                          |
 | --------------------------- | ---------------- | ---------------------------------------------------------------- |
 | `POST /api/ocr`             | `api/ocr.ts`     | Send image to Gemini Vision, return extracted text               |
+| `POST /api/ocr-pdf`         | `api/ocrPdf.ts`  | OCR a whole PDF with bounded server Poppler ranges; return combined text |
 | `POST /api/extract`         | `api/extract.ts` | Send invoice text + customer instructions to Gemini, return JSON |
 | `POST /api/jobs`            | `api/jobs.ts`    | Persist and enqueue a large PDF; return `202` plus job ID        |
 | `GET /api/jobs/:jobId`      | `api/jobs.ts`    | Poll owner-scoped progress and retrieve terminal rows            |
 
-The compatibility OCR/extract routes remain request-scoped. Background-job
-routes are stateful: each job is persisted beneath `JOB_DATA_DIR` so work can
-continue after the browser disconnects and resume after a container restart.
-The frontend and server worker both use `src/config/customers.ts` as the shared
-customer-detection source of truth.
+The compatibility OCR, whole-PDF OCR, and extraction routes remain
+request-scoped. Background-job routes are stateful: each job is persisted
+beneath `JOB_DATA_DIR` so work can continue after the browser disconnects and
+resume after a container restart. The frontend and server worker both use
+`src/config/customers.ts` as the shared customer-detection source of truth.
 
 ### 2.3 Infrastructure & Hosting
 
@@ -142,13 +144,17 @@ read (OCR vs direct text) and what extraction instructions are sent to the AI.
 
 ```
 1. User uploads PDF
-2. PDF.js text extraction returns little/no text → scanned
-3. PDF.js renders each page to a PNG canvas (1.5× scale)
-4. ALL pages are sent to /api/ocr IN PARALLEL (one call per page,
-   fired concurrently via Promise.all — page order preserved)
-5. Gemini Vision reads each image → returns raw text
-6. Combined page text + customer instructions → /api/extract
-7. Same extraction + download flow as digital
+2. Browser PDF.js reads the text layer and page count; customer/garbled-text
+   rules select OCR
+3. Browser sends the complete base64 PDF in one POST /api/ocr-pdf request
+4. Server writes a temporary PDF; Poppler renders bounded ranges of at most
+   10 pages (OCR_RENDER_BATCH_PAGES=10)
+5. Server OCRs the rendered pages with a bounded pool, preserves page order,
+   joins page text with page-break markers, and returns the combined text
+6. Browser re-detects the customer from OCR text when needed, then sends the
+   combined text + customer instructions to /api/extract
+7. Same extraction + download flow as digital; temporary /api/ocr-pdf input is
+   removed when the request finishes
 ```
 
 ### 3.3 Garbled-font PDF (broken text layer)
