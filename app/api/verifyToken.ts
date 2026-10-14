@@ -13,7 +13,14 @@ const JWKS = createRemoteJWKSet(new URL(`https://login.microsoftonline.com/${TEN
 const JWKS_COOLDOWN_MS = 10 * 60 * 1000
 let jwksBlockedUntil = 0
 
-export interface VerifyResult { ok: boolean; reason: string }
+export type VerifyResult =
+  | { ok: true; reason: string; subject: string }
+  | { ok: false; reason: string }
+
+export function tokenSubjectFromClaims(claims: Record<string, unknown>): string | null {
+  const value = claims.oid ?? claims.sub
+  return typeof value === 'string' && value.trim() ? value : null
+}
 
 /** Decode a JWT payload WITHOUT verifying — for diagnostics + the fallback. */
 function peekClaims(token: string): Record<string, unknown> {
@@ -43,7 +50,11 @@ function verifyClaimsOnly(claims: Record<string, unknown>, why: string): VerifyR
   const audOk = claims.aud === CLIENT_ID
   const tidOk = claims.tid === TENANT || (typeof claims.iss === 'string' && claims.iss.includes(TENANT))
   const expOk = typeof claims.exp === 'number' && claims.exp * 1000 > Date.now() - 120_000
-  if (audOk && tidOk && expOk) return { ok: true, reason: `ok-claims-only (${why})` }
+  if (audOk && tidOk && expOk) {
+    const subject = tokenSubjectFromClaims(claims)
+    if (!subject) return { ok: false, reason: 'subject-missing' }
+    return { ok: true, reason: `ok-claims-only (${why})`, subject }
+  }
   return { ok: false, reason: `claims-invalid audOk=${audOk} tidOk=${tidOk} expOk=${expOk} (${why})` }
 }
 
@@ -64,7 +75,11 @@ export async function verifyAzureToken(authHeader: string | undefined): Promise<
     const { payload } = await jwtVerify(token, JWKS, { audience: CLIENT_ID, clockTolerance: 120 })
     const p = payload as Record<string, unknown>
     const issOk = typeof p.iss === 'string' && p.iss.includes(TENANT)
-    if (p.tid === TENANT || issOk) return { ok: true, reason: 'ok' }
+    if (p.tid === TENANT || issOk) {
+      const subject = tokenSubjectFromClaims(p)
+      if (!subject) return { ok: false, reason: 'subject-missing' }
+      return { ok: true, reason: 'ok', subject }
+    }
     return { ok: false, reason: `tenant-mismatch tid=${String(p.tid)}` }
   } catch (e) {
     const err = e as { code?: string; message?: string }
