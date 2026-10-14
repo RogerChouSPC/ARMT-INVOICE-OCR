@@ -56,6 +56,10 @@ class FileJobStore implements JobStore {
     }
   }
 
+  async remove(id: string): Promise<void> {
+    await rm(this.jobDir(id), { recursive: true, force: true })
+  }
+
   async readMetadata(id: string): Promise<JobMetadata | null> {
     const path = join(this.jobDir(id), 'metadata.json')
     try {

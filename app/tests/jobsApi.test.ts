@@ -99,6 +99,18 @@ async function jobDirectories(root: string): Promise<string[]> {
     .map(entry => entry.name)
 }
 
+function captureUnhandledRejections(t: FixtureTestContext): unknown[] {
+  const reasons: unknown[] = []
+  const listener = (reason: unknown) => { reasons.push(reason) }
+  process.on('unhandledRejection', listener)
+  t.after(() => { process.off('unhandledRejection', listener) })
+  return reasons
+}
+
+async function flushUnhandledRejections(): Promise<void> {
+  await new Promise<void>(resolve => setImmediate(resolve))
+}
+
 async function runMiddlewarePipeline(
   handlers: RequestHandler[],
   req: Request,
@@ -168,6 +180,75 @@ test('enqueue failure marks the durable job terminal with a safe error before re
   assert.equal(metadata?.stage, 'error')
   assert.equal(metadata?.error, 'Job could not be queued. Please try again.')
   assert.doesNotMatch(metadata?.error ?? '', /private-token|upstream|Bearer/i)
+})
+
+test('enqueue and terminal metadata failures remove the just-created job and return a safe 500', async (t) => {
+  const { root, store } = await fixture(t)
+  const removedIds: string[] = []
+  const originalRemove = store.remove.bind(store)
+  store.updateMetadata = async () => {
+    throw new Error('private metadata persistence detail')
+  }
+  store.remove = async (id) => {
+    removedIds.push(id)
+    await originalRemove(id)
+  }
+  const handlers = createJobsHandlers({
+    store,
+    worker: {
+      enqueue() {
+        throw new Error('private queue detail')
+      },
+    },
+    verify: async () => ({ ok: true, reason: 'ok', subject: 'owner-a' }),
+  })
+  const unhandled = captureUnhandledRejections(t)
+  const res = responseRecorder()
+
+  await assert.doesNotReject(() => handlers.createJob(request(validCreateBody()), res.response))
+  await flushUnhandledRejections()
+
+  assert.equal(res.code, 500)
+  assert.deepEqual(res.body, { error: 'Unable to create job' })
+  assert.equal(removedIds.length, 1)
+  assert.match(removedIds[0], /^[0-9a-f-]{36}$/)
+  assert.deepEqual(await jobDirectories(root), [])
+  assert.deepEqual(await store.listRecoverable(), [])
+  assert.deepEqual(unhandled, [])
+  assert.doesNotMatch(JSON.stringify(res.body), /private|metadata|persistence|queue/i)
+})
+
+test('rollback removal failure still resolves with the same safe 500', async (t) => {
+  const { root, store } = await fixture(t)
+  let removeCalls = 0
+  store.updateMetadata = async () => {
+    throw new Error('private metadata persistence detail')
+  }
+  store.remove = async () => {
+    removeCalls++
+    throw new Error('private rollback removal detail')
+  }
+  const handlers = createJobsHandlers({
+    store,
+    worker: {
+      enqueue() {
+        throw new Error('private queue detail')
+      },
+    },
+    verify: async () => ({ ok: true, reason: 'ok', subject: 'owner-a' }),
+  })
+  const unhandled = captureUnhandledRejections(t)
+  const res = responseRecorder()
+
+  await assert.doesNotReject(() => handlers.createJob(request(validCreateBody()), res.response))
+  await flushUnhandledRejections()
+
+  assert.equal(removeCalls, 1)
+  assert.equal(res.code, 500)
+  assert.deepEqual(res.body, { error: 'Unable to create job' })
+  assert.equal((await jobDirectories(root)).length, 1)
+  assert.deepEqual(unhandled, [])
+  assert.doesNotMatch(JSON.stringify(res.body), /private|metadata|persistence|queue|rollback|removal/i)
 })
 
 test('digital create accepts text without a client PDF', async (t) => {

@@ -60,6 +60,20 @@ test('create removes staging data when persistence fails after directory creatio
   assert.deepEqual(await readdir(root), [])
 })
 
+test('remove deletes only the validated UUID job and rejects invalid ids', async (t) => {
+  const root = await makeRoot(t)
+  const store = createJobStore(root)
+  const removed = await store.create('owner-1', request, Buffer.from('%PDF-remove'))
+  const preserved = await store.create('owner-1', request, Buffer.from('%PDF-preserve'))
+
+  await store.remove(removed.id)
+
+  assert.equal(await store.readMetadata(removed.id), null)
+  assert.equal((await store.readMetadata(preserved.id))?.id, preserved.id)
+  await assert.rejects(store.remove('../escape'), /invalid job id/i)
+  assert.equal((await store.readMetadata(preserved.id))?.id, preserved.id)
+})
+
 test('updateMetadata keeps immutable identity fields while applying progress', async (t) => {
   const root = await makeRoot(t)
   const store = createJobStore(root)

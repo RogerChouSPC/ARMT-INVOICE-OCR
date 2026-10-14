@@ -108,10 +108,18 @@ export function createJobsHandlers({ store, worker, verify }: JobsHandlerDepende
     try {
       worker.enqueue(metadata.id)
     } catch {
-      await store.updateMetadata(metadata.id, {
-        stage: 'error',
-        error: 'Job could not be queued. Please try again.',
-      })
+      try {
+        await store.updateMetadata(metadata.id, {
+          stage: 'error',
+          error: 'Job could not be queued. Please try again.',
+        })
+      } catch {
+        try {
+          await store.remove(metadata.id)
+        } catch {
+          // The response must remain controlled even if compensating cleanup fails.
+        }
+      }
       res.status(500).json({ error: 'Unable to create job' })
       return
     }

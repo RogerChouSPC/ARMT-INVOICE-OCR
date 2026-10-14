@@ -17,6 +17,7 @@ export interface JobResult { rows: Record<string, unknown>[] }
 
 export interface JobStore {
   create(ownerId: string, request: StoredJobRequest, inputPdf: Buffer): Promise<JobMetadata>
+  remove(id: string): Promise<void>
   readMetadata(id: string): Promise<JobMetadata | null>
   updateMetadata(id: string, update: Partial<Pick<JobMetadata, 'stage' | 'pagesDone' | 'pagesTotal' | 'extractBatchesDone' | 'extractBatchesTotal' | 'error'>>): Promise<JobMetadata>
   readRequest(id: string): Promise<StoredJobRequest | null>
