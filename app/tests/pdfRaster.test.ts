@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { pageRanges, parsePdfInfoPages, sortRenderedPageNames } from '../api/pdfRaster'
+import { pageRanges, parsePdfInfoPages, renderPdfPageRange, sortRenderedPageNames } from '../api/pdfRaster'
 
 test('splits 277 pages into ten-page ranges', () => {
   const ranges = pageRanges(277, 10)
@@ -23,4 +23,11 @@ test('sorts Poppler output numerically', () => {
     { filename: 'page-11.png', page: 11 },
     { filename: 'page-12.png', page: 12 },
   ])
+})
+
+test('rejects render ranges larger than ten pages before Poppler executes', () => {
+  assert.throws(
+    () => renderPdfPageRange('does-not-need-to-exist.pdf', 1, 11),
+    /at most 10 pages/i,
+  )
 })

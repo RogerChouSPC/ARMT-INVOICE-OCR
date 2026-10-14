@@ -94,6 +94,9 @@ export function renderPdfPageRange(pdfPath: string, startPage: number, endPage: 
   if (!Number.isInteger(startPage) || !Number.isInteger(endPage) || startPage < 1 || startPage > endPage) {
     throw new Error('PDF page range must use integers with 1 <= start <= end')
   }
+  if (endPage - startPage + 1 > 10) {
+    throw new Error('PDF page range must contain at most 10 pages')
+  }
 
   const dir = mkdtempSync(join(tmpdir(), 'armt-ocrpdf-range-'))
   try {
