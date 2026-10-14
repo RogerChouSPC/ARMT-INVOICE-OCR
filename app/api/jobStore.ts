@@ -21,7 +21,8 @@ class FileJobStore implements JobStore {
     await mkdir(this.rootDir, { recursive: true })
     const id = randomUUID()
     const jobDir = this.jobDir(id)
-    await mkdir(jobDir, { recursive: false })
+    const stagingDir = join(this.rootDir, `.${id}.${randomUUID()}.tmp`)
+    await mkdir(stagingDir, { recursive: false })
     const storedRequest: StoredJobRequest = {
       filename: request.filename, pageCount: request.pageCount, text: request.text, isDigital: request.isDigital,
       useOcr: request.useOcr, customerMaster: request.customerMaster, customerId: request.customerId,
@@ -43,10 +44,16 @@ class FileJobStore implements JobStore {
       error: null,
     }
 
-    await this.writeJsonAtomic(join(jobDir, 'request.json'), storedRequest)
-    await writeFile(join(jobDir, 'input.pdf'), new Uint8Array(inputPdf))
-    await this.writeJsonAtomic(join(jobDir, 'metadata.json'), metadata)
-    return metadata
+    try {
+      await this.writeJsonAtomic(join(stagingDir, 'request.json'), storedRequest)
+      await writeFile(join(stagingDir, 'input.pdf'), new Uint8Array(inputPdf))
+      await this.writeJsonAtomic(join(stagingDir, 'metadata.json'), metadata)
+      await rename(stagingDir, jobDir)
+      return metadata
+    } catch (error) {
+      await rm(stagingDir, { recursive: true, force: true })
+      throw error
+    }
   }
 
   async readMetadata(id: string): Promise<JobMetadata | null> {

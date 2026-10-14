@@ -1,4 +1,4 @@
-import type { Request, Response } from 'express'
+import type { NextFunction, Request, RequestHandler, Response } from 'express'
 import type { JobMetadata, JobStore, StoredJobRequest } from './jobTypes'
 import type { JobWorker } from './jobWorker'
 import type { VerifyResult } from './verifyToken'
@@ -13,6 +13,17 @@ interface JobsHandlerDependencies {
   store: JobStore
   worker: Pick<JobWorker, 'enqueue'>
   verify(authHeader: string | undefined): Promise<VerifyResult>
+}
+
+interface JobsHandlers {
+  authenticate: RequestHandler
+  createJob: RequestHandler
+  getJob: RequestHandler
+}
+
+export interface JobsRouteRegistrar {
+  post(path: string, ...handlers: RequestHandler[]): unknown
+  get(path: string, ...handlers: RequestHandler[]): unknown
 }
 
 interface ValidatedCreate {
@@ -40,18 +51,39 @@ export function readJobsRuntimeConfig(
     'JOB_RETENTION_HOURS',
     24,
   )
+  const retentionMs = retentionHours * 60 * 60 * 1000
+  if (!Number.isFinite(retentionMs)) {
+    throw new RangeError('JOB_RETENTION_HOURS environment variable is too large')
+  }
   return {
     jobConcurrency: positiveIntegerEnvironment(environment, 'JOB_CONCURRENCY', 1),
     renderBatchPages: positiveIntegerEnvironment(environment, 'OCR_RENDER_BATCH_PAGES', 10, 10),
     ocrConcurrency: positiveIntegerEnvironment(environment, 'OCR_CONCURRENCY', 8, 8),
     retryDelaysMs: [2000, 5000, 10000],
-    retentionMs: retentionHours * 60 * 60 * 1000,
+    retentionMs,
   }
 }
 
 export function createJobsHandlers({ store, worker, verify }: JobsHandlerDependencies) {
-  async function createJob(req: Request, res: Response): Promise<void> {
+  const verifiedSubjects = new WeakMap<Request, string>()
+
+  async function authenticate(req: Request, res: Response, next: NextFunction): Promise<void> {
     const subject = await authenticatedSubject(req, verify)
+    if (subject === null) {
+      res.status(401).json({ error: 'Unauthorized' })
+      return
+    }
+    verifiedSubjects.set(req, subject)
+    next()
+  }
+
+  async function requestSubject(req: Request): Promise<string | null> {
+    const verified = verifiedSubjects.get(req)
+    return verified ?? authenticatedSubject(req, verify)
+  }
+
+  async function createJob(req: Request, res: Response): Promise<void> {
+    const subject = await requestSubject(req)
     if (subject === null) {
       res.status(401).json({ error: 'Unauthorized' })
       return
@@ -65,21 +97,34 @@ export function createJobsHandlers({ store, worker, verify }: JobsHandlerDepende
       return
     }
 
+    let metadata: JobMetadata
     try {
-      const metadata = await store.create(subject, validated.value.request, validated.value.pdf)
-      worker.enqueue(metadata.id)
-      res.status(202).json({
-        jobId: metadata.id,
-        status: metadata.stage,
-        pagesTotal: metadata.pagesTotal,
-      })
+      metadata = await store.create(subject, validated.value.request, validated.value.pdf)
     } catch {
       res.status(500).json({ error: 'Unable to create job' })
+      return
     }
+
+    try {
+      worker.enqueue(metadata.id)
+    } catch {
+      await store.updateMetadata(metadata.id, {
+        stage: 'error',
+        error: 'Job could not be queued. Please try again.',
+      })
+      res.status(500).json({ error: 'Unable to create job' })
+      return
+    }
+
+    res.status(202).json({
+      jobId: metadata.id,
+      status: metadata.stage,
+      pagesTotal: metadata.pagesTotal,
+    })
   }
 
   async function getJob(req: Request, res: Response): Promise<void> {
-    const subject = await authenticatedSubject(req, verify)
+    const subject = await requestSubject(req)
     if (subject === null) {
       res.status(401).json({ error: 'Unauthorized' })
       return
@@ -110,7 +155,16 @@ export function createJobsHandlers({ store, worker, verify }: JobsHandlerDepende
     }
   }
 
-  return { createJob, getJob }
+  return { authenticate, createJob, getJob }
+}
+
+export function registerJobsRoutes(
+  router: JobsRouteRegistrar,
+  handlers: JobsHandlers,
+  jsonParser: RequestHandler,
+): void {
+  router.post('/api/jobs', handlers.authenticate, jsonParser, handlers.createJob)
+  router.get('/api/jobs/:jobId', handlers.authenticate, handlers.getJob)
 }
 
 async function authenticatedSubject(
@@ -119,7 +173,7 @@ async function authenticatedSubject(
 ): Promise<string | null> {
   try {
     const result = await verify(req.headers.authorization)
-    return result.ok ? result.subject : null
+    return result.ok && result.reason === 'ok' ? result.subject : null
   } catch {
     return null
   }

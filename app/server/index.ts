@@ -4,7 +4,7 @@ import ocrHandler from '../api/ocr.ts'
 import ocrPdfHandler from '../api/ocrPdf.ts'
 import extractHandler, { extractRowsCore } from '../api/extract.ts'
 import paymentAdviceHandler from '../api/paymentAdvice.ts'
-import { createJobsHandlers, readJobsRuntimeConfig } from '../api/jobs.ts'
+import { createJobsHandlers, readJobsRuntimeConfig, registerJobsRoutes } from '../api/jobs.ts'
 import { createJobStore } from '../api/jobStore.ts'
 import { createJobWorker } from '../api/jobWorker.ts'
 import { ocrImageCore } from '../api/ocr.ts'
@@ -56,7 +56,9 @@ const jobs = createJobsHandlers({
 
 // Scanned-page images and whole PDFs arrive as base64 in the request body — the
 // default 100 KB limit is far too small, so allow up to 50 MB.
-app.use(express.json({ limit: '50mb' }))
+const jsonBodyParser = express.json({ limit: '50mb' })
+registerJobsRoutes(app, jobs, jsonBodyParser)
+app.use(jsonBodyParser)
 
 // Liveness probe used by Docker HEALTHCHECK and any external monitoring.
 app.get('/healthz', (_req, res) => {
@@ -67,8 +69,6 @@ app.post('/api/ocr', ocrHandler)
 app.post('/api/ocr-pdf', ocrPdfHandler)
 app.post('/api/extract', extractHandler)
 app.post('/api/payment-advice', paymentAdviceHandler)
-app.post('/api/jobs', jobs.createJob)
-app.get('/api/jobs/:jobId', jobs.getJob)
 
 // Serve the built React app (index.html, popup.html, hashed assets, favicon).
 app.use(express.static(distDir))

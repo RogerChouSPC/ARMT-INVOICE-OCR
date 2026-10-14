@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { access, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { access, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -12,7 +12,11 @@ const request: StoredJobRequest = {
   customerInstructions: '', vendorCode: 'auto', vendorBranch: 'auto',
 }
 
-async function makeRoot(t: test.TestContext): Promise<string> {
+interface FixtureTestContext {
+  after(fn: () => void | Promise<void>): void
+}
+
+async function makeRoot(t: FixtureTestContext): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'job-store-'))
   t.after(async () => rm(root, { recursive: true, force: true }))
   return root
@@ -21,8 +25,13 @@ async function makeRoot(t: test.TestContext): Promise<string> {
 test('create persists queued metadata, request, and input without credentials', async (t) => {
   const root = await makeRoot(t)
   const store = createJobStore(root)
+  const requestWithCredentials = {
+    ...request,
+    authorization: 'Bearer test-token',
+    apiKey: 'test-key',
+  }
 
-  const metadata = await store.create('owner-1', { ...request, authorization: 'Bearer test-token', apiKey: 'test-key' }, Buffer.from('%PDF-test'))
+  const metadata = await store.create('owner-1', requestWithCredentials, Buffer.from('%PDF-test'))
   const jobDir = join(root, metadata.id)
   const metadataJson = await readFile(join(jobDir, 'metadata.json'), 'utf8')
   const requestJson = await readFile(join(jobDir, 'request.json'), 'utf8')
@@ -33,6 +42,22 @@ test('create persists queued metadata, request, and input without credentials', 
   await access(join(jobDir, 'input.pdf'))
   assert.doesNotMatch(metadataJson, /Bearer|apiKey/i)
   assert.doesNotMatch(requestJson, /Bearer|apiKey/i)
+})
+
+test('create removes staging data when persistence fails after directory creation', async (t) => {
+  const root = await makeRoot(t)
+  const store = createJobStore(root)
+  const unserializableRequest: StoredJobRequest = {
+    ...request,
+    customerMaster: [BigInt(1)],
+  }
+
+  await assert.rejects(
+    store.create('owner-1', unserializableRequest, Buffer.from('%PDF-private')),
+    /BigInt/,
+  )
+
+  assert.deepEqual(await readdir(root), [])
 })
 
 test('updateMetadata keeps immutable identity fields while applying progress', async (t) => {

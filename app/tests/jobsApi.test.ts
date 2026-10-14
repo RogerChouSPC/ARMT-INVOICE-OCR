@@ -3,8 +3,8 @@ import { mkdtemp, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
-import type { Request, Response } from 'express'
-import { createJobsHandlers, readJobsRuntimeConfig } from '../api/jobs'
+import type { Request, RequestHandler, Response } from 'express'
+import { createJobsHandlers, readJobsRuntimeConfig, registerJobsRoutes } from '../api/jobs'
 import { createJobStore } from '../api/jobStore'
 import type { JobStore, StoredJobRequest } from '../api/jobTypes'
 import type { VerifyResult } from '../api/verifyToken'
@@ -78,7 +78,7 @@ async function fixture(t: FixtureTestContext): Promise<Fixture> {
   t.after(async () => rm(root, { recursive: true, force: true }))
   const store = createJobStore(root)
   const enqueued: string[] = []
-  let verifyResult: VerifyResult = { ok: true, reason: 'test', subject: 'owner-a' }
+  let verifyResult: VerifyResult = { ok: true, reason: 'ok', subject: 'owner-a' }
   const handlers = createJobsHandlers({
     store,
     worker: { enqueue: id => { enqueued.push(id) } },
@@ -99,6 +99,23 @@ async function jobDirectories(root: string): Promise<string[]> {
     .map(entry => entry.name)
 }
 
+async function runMiddlewarePipeline(
+  handlers: RequestHandler[],
+  req: Request,
+  res: Response,
+): Promise<void> {
+  async function dispatch(index: number): Promise<void> {
+    const handler = handlers[index]
+    if (!handler) return
+    let nextPromise: Promise<void> | undefined
+    await handler(req, res, () => {
+      nextPromise = dispatch(index + 1)
+    })
+    await nextPromise
+  }
+  await dispatch(0)
+}
+
 test('create returns 202 and enqueues only after durable creation', async (t) => {
   const setup = await fixture(t)
   const events: string[] = []
@@ -111,7 +128,7 @@ test('create returns 202 and enqueues only after durable creation', async (t) =>
   const handlers = createJobsHandlers({
     store: setup.store,
     worker: { enqueue: id => { events.push(`enqueued:${id}`); setup.enqueued.push(id) } },
-    verify: async () => ({ ok: true, reason: 'test', subject: 'owner-a' }),
+    verify: async () => ({ ok: true, reason: 'ok', subject: 'owner-a' }),
   })
   const res = responseRecorder()
 
@@ -127,6 +144,30 @@ test('create returns 202 and enqueues only after durable creation', async (t) =>
     `enqueued:${String(res.body.jobId)}`,
   ])
   assert.equal((await setup.store.readMetadata(String(res.body.jobId)))?.ownerId, 'owner-a')
+})
+
+test('enqueue failure marks the durable job terminal with a safe error before returning 500', async (t) => {
+  const { root, store } = await fixture(t)
+  const handlers = createJobsHandlers({
+    store,
+    worker: {
+      enqueue() {
+        throw new Error('Bearer private-token upstream queue detail')
+      },
+    },
+    verify: async () => ({ ok: true, reason: 'ok', subject: 'owner-a' }),
+  })
+  const res = responseRecorder()
+
+  await handlers.createJob(request(validCreateBody()), res.response)
+
+  assert.equal(res.code, 500)
+  const directories = await jobDirectories(root)
+  assert.equal(directories.length, 1)
+  const metadata = await store.readMetadata(directories[0])
+  assert.equal(metadata?.stage, 'error')
+  assert.equal(metadata?.error, 'Job could not be queued. Please try again.')
+  assert.doesNotMatch(metadata?.error ?? '', /private-token|upstream|Bearer/i)
 })
 
 test('digital create accepts text without a client PDF', async (t) => {
@@ -214,10 +255,78 @@ test('both handlers return 401 when token verification fails', async (t) => {
   assert.deepEqual(enqueued, [])
 })
 
+test('claims-only verifier success is rejected by both background-job handlers', async (t) => {
+  const { root, store, handlers, enqueued, setVerifyResult } = await fixture(t)
+  const forgedOwnerJob = await store.create('forged-owner', storedRequest, Buffer.from('%PDF-test'))
+  const directoriesBefore = await jobDirectories(root)
+  setVerifyResult({
+    ok: true,
+    reason: 'ok-claims-only (jwks-cooldown)',
+    subject: 'forged-owner',
+  })
+  const createRes = responseRecorder()
+  const getRes = responseRecorder()
+
+  await handlers.createJob(request(validCreateBody()), createRes.response)
+  await handlers.getJob(request({}, { jobId: forgedOwnerJob.id }), getRes.response)
+
+  assert.equal(createRes.code, 401)
+  assert.equal(getRes.code, 401)
+  assert.deepEqual(await jobDirectories(root), directoriesBefore)
+  assert.deepEqual(enqueued, [])
+})
+
+test('registered POST pipeline authenticates before parsing and reuses the signed subject', async (t) => {
+  const { store } = await fixture(t)
+  const enqueued: string[] = []
+  let verifyCalls = 0
+  let parserCalls = 0
+  let verifyResult: VerifyResult = { ok: false, reason: 'invalid-test-token' }
+  const handlers = createJobsHandlers({
+    store,
+    worker: { enqueue: id => { enqueued.push(id) } },
+    verify: async () => {
+      verifyCalls++
+      return verifyResult
+    },
+  })
+  let postPath = ''
+  let postHandlers: RequestHandler[] = []
+  registerJobsRoutes({
+    post(path, ...routeHandlers) {
+      postPath = path
+      postHandlers = routeHandlers
+    },
+    get() {},
+  }, handlers, (req, _res, next) => {
+    parserCalls++
+    req.body = validCreateBody()
+    next()
+  })
+
+  const unauthorizedReq = request()
+  const unauthorizedRes = responseRecorder()
+  await runMiddlewarePipeline(postHandlers, unauthorizedReq, unauthorizedRes.response)
+  assert.equal(postPath, '/api/jobs')
+  assert.equal(unauthorizedRes.code, 401)
+  assert.equal(parserCalls, 0)
+  assert.equal(verifyCalls, 1)
+
+  verifyResult = { ok: true, reason: 'ok', subject: 'owner-a' }
+  const signedReq = request()
+  const signedRes = responseRecorder()
+  await runMiddlewarePipeline(postHandlers, signedReq, signedRes.response)
+
+  assert.equal(signedRes.code, 202)
+  assert.equal(parserCalls, 1)
+  assert.equal(verifyCalls, 2)
+  assert.deepEqual(enqueued, [signedRes.body.jobId])
+})
+
 test('another authenticated owner receives 404 for running and completed jobs', async (t) => {
   const { store, handlers, setVerifyResult } = await fixture(t)
   const job = await store.create('owner-a', storedRequest, Buffer.from('%PDF-test'))
-  setVerifyResult({ ok: true, reason: 'test', subject: 'owner-b' })
+  setVerifyResult({ ok: true, reason: 'ok', subject: 'owner-b' })
   const runningRes = responseRecorder()
 
   await handlers.getJob(request({}, { jobId: job.id }), runningRes.response)
@@ -329,6 +438,7 @@ test('job runtime config applies production defaults and validates numeric envir
     { OCR_CONCURRENCY: '9' },
     { JOB_RETENTION_HOURS: '0' },
     { JOB_RETENTION_HOURS: 'Infinity' },
+    { JOB_RETENTION_HOURS: '1e308' },
   ]
   for (const environment of invalid) {
     assert.throws(() => readJobsRuntimeConfig(environment), /environment variable/i)
