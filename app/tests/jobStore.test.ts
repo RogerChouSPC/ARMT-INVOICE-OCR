@@ -91,3 +91,18 @@ test('cleanup removes expired terminal jobs but preserves recoverable jobs', asy
   assert.equal(await store.readMetadata(done.id), null)
   assert.equal((await store.readMetadata(ocr.id))?.stage, 'ocr')
 })
+test('cleanupExpired defaults retention to 24 hours', async (t) => {
+  const root = await makeRoot(t)
+  const store = createJobStore(root)
+  const done = await store.create('owner-1', request, Buffer.from('%PDF-test'))
+  await store.updateMetadata(done.id, { stage: 'done' })
+
+  const metadataPath = join(root, done.id, 'metadata.json')
+  const metadata = JSON.parse(await readFile(metadataPath, 'utf8')) as Record<string, unknown>
+  metadata.updatedAt = '2026-10-13T12:00:00.000Z'
+  await writeFile(metadataPath, JSON.stringify(metadata), 'utf8')
+
+  await store.cleanupExpired(new Date('2026-10-14T00:00:00.000Z'))
+
+  assert.equal((await store.readMetadata(done.id))?.stage, 'done')
+})

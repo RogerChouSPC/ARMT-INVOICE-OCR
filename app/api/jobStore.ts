@@ -6,6 +6,7 @@ import type { JobMetadata, JobResult, JobStore, StoredJobRequest } from './jobTy
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const RECOVERABLE_STAGES = new Set(['queued', 'rendering', 'ocr', 'extracting'])
 const TERMINAL_STAGES = new Set(['done', 'error'])
+const DEFAULT_RETENTION_MS = 24 * 60 * 60 * 1000
 
 type MetadataUpdate = Parameters<JobStore['updateMetadata']>[1]
 
@@ -143,7 +144,7 @@ class FileJobStore implements JobStore {
       .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
   }
 
-  async cleanupExpired(now: Date, retentionMs: number): Promise<void> {
+  async cleanupExpired(now: Date, retentionMs = DEFAULT_RETENTION_MS): Promise<void> {
     if (retentionMs < 0) throw new RangeError('retention must not be negative')
 
     let entries: Awaited<ReturnType<typeof readdir>>

@@ -26,5 +26,5 @@ export interface JobStore {
   writeResult(id: string, result: JobResult): Promise<void>
   readResult(id: string): Promise<JobResult | null>
   listRecoverable(): Promise<JobMetadata[]>
-  cleanupExpired(now: Date, retentionMs: number): Promise<void>
+  cleanupExpired(now: Date, retentionMs?: number): Promise<void>
 }
