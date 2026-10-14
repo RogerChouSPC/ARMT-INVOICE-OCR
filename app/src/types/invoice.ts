@@ -82,9 +82,15 @@ export type ProcessingState =
   | 'error'
 
 export interface FileProcessingStatus {
-  file: File
+  file?: File
+  filename: string
+  jobId?: string
   state: ProcessingState
   progress: number
+  pagesDone?: number
+  pagesTotal?: number
+  extractBatchesDone?: number
+  extractBatchesTotal?: number
   error?: string
   rows: InvoiceRow[]
 }

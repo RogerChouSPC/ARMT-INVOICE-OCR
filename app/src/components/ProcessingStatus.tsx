@@ -54,13 +54,14 @@ export default function ProcessingStatus({ items, pageStats }: Props) {
                 {/* left: file icon + name */}
                 <div className="flex items-center gap-2 min-w-0">
                   <FileIcon state={item.state} />
-                  <span className="text-sm text-foreground truncate max-w-xs">{item.file.name}</span>
+                  <span className="text-sm text-foreground truncate max-w-xs">{item.filename}</span>
                 </div>
 
                 {/* right: eye → bar loader (if processing) → status label */}
                 <div className="flex items-center gap-2 shrink-0 ml-3">
+                  {item.file && (
                   <button
-                    onClick={() => setPreviewFile(item.file)}
+                    onClick={() => item.file && setPreviewFile(item.file)}
                     title={t('status.previewPdf')}
                     className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                   >
@@ -68,6 +69,7 @@ export default function ProcessingStatus({ items, pageStats }: Props) {
                       <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" />
                     </svg>
                   </button>
+                  )}
 
                   {isProcessing(item.state) && (
                     <div className="flex items-end gap-[1.5px] h-4">
@@ -98,6 +100,25 @@ export default function ProcessingStatus({ items, pageStats }: Props) {
                   style={{ width: `${item.progress}%` }}
                 />
               </div>
+
+              {item.state === 'ocr'
+                && item.pagesDone !== undefined
+                && item.pagesTotal !== undefined && (
+                  <p className="text-xs text-muted-foreground mt-1 tabular-nums">
+                    {t('status.pages', { done: item.pagesDone, total: item.pagesTotal })}
+                  </p>
+                )}
+
+              {item.state === 'extracting'
+                && item.extractBatchesDone !== undefined
+                && item.extractBatchesTotal !== undefined && (
+                  <p className="text-xs text-muted-foreground mt-1 tabular-nums">
+                    {t('status.extractBatches', {
+                      done: item.extractBatchesDone,
+                      total: item.extractBatchesTotal,
+                    })}
+                  </p>
+                )}
 
               {item.error && (
                 <p className="text-xs text-destructive mt-1 leading-relaxed">

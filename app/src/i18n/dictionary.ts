@@ -62,6 +62,8 @@ export const th = {
   'status.state.extracting': 'กำลังแยกข้อมูล…',
   'status.state.done': 'เสร็จสิ้น',
   'status.state.error': 'ผิดพลาด',
+  'status.pages': 'หน้า {done}/{total}',
+  'status.extractBatches': 'ชุด {done}/{total}',
   'status.quotaFix': 'วิธีแก้: เปิดใช้งานการเรียกเก็บเงินที่',
 
   // Results table
@@ -204,6 +206,8 @@ export const en: Record<TKey, string> = {
   'status.state.extracting': 'Extracting fields…',
   'status.state.done': 'Done',
   'status.state.error': 'Error',
+  'status.pages': 'page {done}/{total}',
+  'status.extractBatches': 'batch {done}/{total}',
   'status.quotaFix': 'Fix: enable billing at',
 
   // Results table

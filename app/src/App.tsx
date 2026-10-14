@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useAuth } from '@/auth/AuthProvider'
 import { useT } from '@/i18n/LanguageProvider'
 import LoginPage from '@/components/LoginPage'
@@ -15,12 +15,47 @@ import { useBeforeUnload } from '@/hooks/useBeforeUnload'
 import { extractPdfText, countPdfPages } from '@/utils/pdfTextExtractor'
 import { detectCustomer, shouldUseOcr, buildCustomerInstructions } from '@/config/customers'
 import { exportToExcel } from '@/utils/excelExporter'
-import type { InvoiceRow, FileProcessingStatus } from '@/types/invoice'
+import {
+  createActiveJobRegistry,
+  createBackgroundJob,
+  pollBackgroundJob,
+  type BackgroundJobStage,
+  type BackgroundJobStatus,
+} from '@/api/backgroundJobs'
+import type { InvoiceRow, FileProcessingStatus, ProcessingState } from '@/types/invoice'
 import { EMPTY_ROW } from '@/types/invoice'
 
 type Tab = 'ocr' | 'customer-master' | 'payment-advice'
 
 const apiUrl = (path: string) => `${import.meta.env.BASE_URL}api/${path}`
+const LARGE_PDF_PAGE_THRESHOLD = 25
+
+function processingState(stage: BackgroundJobStage): ProcessingState {
+  return stage === 'queued' ? 'rendering' : stage
+}
+
+function statusPatch(status: BackgroundJobStatus): Partial<FileProcessingStatus> {
+  return {
+    filename: status.filename,
+    state: processingState(status.status),
+    progress: status.progress,
+    pagesDone: status.pagesDone,
+    pagesTotal: status.pagesTotal,
+    extractBatchesDone: status.extractBatchesDone,
+    extractBatchesTotal: status.extractBatchesTotal,
+    error: status.error ?? undefined,
+  }
+}
+
+function completeRows(rows: Partial<InvoiceRow>[], filename: string): InvoiceRow[] {
+  const complete = rows.map((row) => ({ ...EMPTY_ROW(), ...row, seq: 0 }))
+  if (complete.length === 0) complete.push({ ...EMPTY_ROW(), remark: filename })
+  return complete
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'AbortError'
+}
 
 /** Read a File as a base64 string (no data: prefix) for sending to the API. */
 function fileToBase64(file: File): Promise<string> {
@@ -40,7 +75,15 @@ export default function App() {
   const [statuses, setStatuses]         = useState<FileProcessingStatus[]>([])
   const [rows, setRows]                 = useState<InvoiceRow[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
-  const [pageStats, setPageStats]       = useState({ done: 0, total: 0 })
+  const activeJobRegistry = useMemo(() => createActiveJobRegistry(localStorage), [])
+  const pollControllers = useRef(new Set<AbortController>())
+  const pageStats = useMemo(() => statuses.reduce(
+    (total, status) => ({
+      done: total.done + (status.pagesDone ?? 0),
+      total: total.total + (status.pagesTotal ?? 0),
+    }),
+    { done: 0, total: 0 },
+  ), [statuses])
 
   // All hooks must be declared before any conditional return
   const updateStatus = useCallback(
@@ -49,10 +92,88 @@ export default function App() {
     []
   )
 
+  const updateJobStatus = useCallback(
+    (jobId: string, patch: Partial<FileProcessingStatus>) =>
+      setStatuses((prev) => prev.map((status) =>
+        status.jobId === jobId ? { ...status, ...patch } : status)),
+    [],
+  )
+
+  useEffect(() => () => {
+    for (const controller of pollControllers.current) controller.abort()
+    pollControllers.current.clear()
+  }, [])
+
+  useEffect(() => {
+    if (!user) return
+    const restored = activeJobRegistry.list()
+    if (restored.length === 0) return
+
+    const controller = new AbortController()
+    setIsProcessing(true)
+    setStatuses((previous) => {
+      const existing = new Set(previous.flatMap(status => status.jobId ? [status.jobId] : []))
+      return [
+        ...previous,
+        ...restored
+          .filter(job => !existing.has(job.jobId))
+          .map(job => ({
+            filename: job.filename,
+            jobId: job.jobId,
+            state: 'rendering' as const,
+            progress: 0,
+            pagesDone: 0,
+            pagesTotal: job.pagesTotal,
+            extractBatchesDone: 0,
+            extractBatchesTotal: 0,
+            rows: [],
+          })),
+      ]
+    })
+
+    const restore = async (job: typeof restored[number]) => {
+      try {
+        await pollBackgroundJob(job.jobId, getToken, {
+          registry: activeJobRegistry,
+          signal: controller.signal,
+          onStatus: status => { updateJobStatus(job.jobId, statusPatch(status)) },
+          onResult: resultRows => {
+            const completed = completeRows(resultRows, job.filename)
+            updateJobStatus(job.jobId, { rows: completed })
+            setRows(previous => [
+              ...previous,
+              ...completed.map((row, index) => ({
+                ...row,
+                seq: previous.length + index + 1,
+              })),
+            ])
+          },
+        })
+        activeJobRegistry.remove(job.jobId)
+      } catch (pollError) {
+        if (isAbortError(pollError)) return
+        const message = pollError instanceof Error ? pollError.message : 'Unknown error'
+        updateJobStatus(job.jobId, { state: 'error', error: message })
+      }
+    }
+
+    void Promise.all(restored.map(restore)).finally(() => {
+      if (!controller.signal.aborted) setIsProcessing(false)
+    })
+    return () => { controller.abort() }
+  }, [activeJobRegistry, getToken, updateJobStatus, user])
+
   const processFiles = useCallback(async (files: File[]) => {
     if (files.length === 0) return
     setIsProcessing(true)
-    setStatuses(files.map((file) => ({ file, state: 'idle', progress: 0, rows: [] })))
+    setStatuses(files.map((file) => ({
+      file,
+      filename: file.name,
+      state: 'idle',
+      progress: 0,
+      pagesDone: 0,
+      rows: [],
+    })))
     const newRows: InvoiceRow[] = []
     const customerMaster = getCustomerMasterRows()
 
@@ -62,14 +183,17 @@ export default function App() {
       try { pageCounts.push(await countPdfPages(file)) }
       catch { pageCounts.push(1) }
     }
-    setPageStats({ done: 0, total: pageCounts.reduce((a, b) => a + b, 0) })
+    setStatuses(previous => previous.map((status, index) => ({
+      ...status,
+      pagesTotal: pageCounts[index],
+    })))
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
-      const pagesBefore = pageCounts.slice(0, i).reduce((a, b) => a + b, 0)
       try {
         updateStatus(i, { state: 'rendering', progress: 15 })
         const { text: pdfText, isDigital, pageCount } = await extractPdfText(file)
+        updateStatus(i, { pagesTotal: pageCount })
         let extractedRows: Partial<InvoiceRow>[] = []
 
         // Per-customer config decides OCR vs direct text; falls back to auto-detection.
@@ -83,8 +207,54 @@ export default function App() {
           vendorBranch: customerRule?.vendorBranch ?? 'auto',
         }
 
+        if (pageCount > LARGE_PDF_PAGE_THRESHOLD) {
+          const created = await createBackgroundJob({
+            filename: file.name,
+            pageCount,
+            text: pdfText,
+            isDigital,
+            useOcr,
+            ...(useOcr ? { pdf: await fileToBase64(file) } : {}),
+            customerMaster,
+            ...customerPayload,
+          }, getToken)
+          activeJobRegistry.save({
+            jobId: created.jobId,
+            filename: file.name,
+            pagesTotal: created.pagesTotal,
+          })
+          updateStatus(i, {
+            jobId: created.jobId,
+            state: 'rendering',
+            progress: 0,
+            pagesDone: 0,
+            pagesTotal: created.pagesTotal,
+            extractBatchesDone: 0,
+            extractBatchesTotal: 0,
+          })
+
+          const controller = new AbortController()
+          pollControllers.current.add(controller)
+          try {
+            await pollBackgroundJob(created.jobId, getToken, {
+              registry: activeJobRegistry,
+              signal: controller.signal,
+              onStatus: status => { updateStatus(i, statusPatch(status)) },
+              onResult: resultRows => {
+                const completed = completeRows(resultRows, file.name)
+                newRows.push(...completed)
+                updateStatus(i, { rows: completed })
+              },
+            })
+            activeJobRegistry.remove(created.jobId)
+          } finally {
+            pollControllers.current.delete(controller)
+          }
+          continue
+        }
+
         if (!useOcr) {
-          updateStatus(i, { state: 'extracting', progress: 50 })
+          updateStatus(i, { state: 'extracting', progress: 50, pagesDone: pageCount })
           const token = await getToken()
           const res = await fetch(apiUrl('extract'), {
             method: 'POST',
@@ -115,8 +285,7 @@ export default function App() {
             throw new Error([err.error, err.reason].filter(Boolean).join(" — ") || `OCR failed: ${ocrRes.status}`)
           }
           const { text: ocrCombined } = await ocrRes.json()
-          setPageStats((s) => ({ ...s, done: pagesBefore + pageCount }))
-          updateStatus(i, { state: 'extracting', progress: 80 })
+          updateStatus(i, { state: 'extracting', progress: 80, pagesDone: pageCount })
           // Scanned PDFs have no embedded text, so pdfText may be empty/garbled
           // and the initial detectCustomer() above may have returned null.
           // Re-detect from the assembled OCR text now that we have real content.
@@ -143,24 +312,25 @@ export default function App() {
           extractedRows = r
         }
 
-        const fileRows: InvoiceRow[] = (extractedRows as Partial<InvoiceRow>[]).map((r) => ({ ...EMPTY_ROW(), ...r, seq: 0 }))
-        if (fileRows.length === 0) fileRows.push({ ...EMPTY_ROW(), remark: file.name })
+        const fileRows = completeRows(extractedRows, file.name)
         newRows.push(...fileRows)
-        updateStatus(i, { state: 'done', progress: 100, rows: fileRows })
-        console.info(`${file.name}: customer=${customerRule?.id ?? 'unknown'}, ${useOcr ? 'OCR' : 'text'} path, ${pageCount} page(s), ${fileRows.length} row(s)`)
+        updateStatus(i, {
+          state: 'done',
+          progress: 100,
+          pagesDone: pageCount,
+          pagesTotal: pageCount,
+          rows: fileRows,
+        })
       } catch (err) {
+        if (isAbortError(err)) continue
         const msg = err instanceof Error ? err.message : 'Unknown error'
-        updateStatus(i, { state: 'error', progress: 0, error: msg })
-        console.error(`${file.name}:`, msg)
-      } finally {
-        // Ensure every page of this file is counted once the file finishes.
-        setPageStats((s) => ({ ...s, done: Math.max(s.done, pagesBefore + pageCounts[i]) }))
+        updateStatus(i, { state: 'error', error: msg })
       }
     }
 
     setRows((prev) => [...prev, ...newRows.map((r, i) => ({ ...r, seq: prev.length + i + 1 }))])
     setIsProcessing(false)
-  }, [updateStatus, getToken])
+  }, [activeJobRegistry, getToken, updateStatus])
 
   const refreshCustomerMapping = useCallback(() => {
     const cm = getCustomerMasterRows()
@@ -181,7 +351,7 @@ export default function App() {
 
   if (!user) return <LoginPage initError={error} isLoading={loading} />
 
-  const clearAll = () => { setRows([]); setStatuses([]); setPageStats({ done: 0, total: 0 }) }
+  const clearAll = () => { setRows([]); setStatuses([]) }
 
   const allDone = statuses.length > 0 && statuses.every((s) => s.state === 'done' || s.state === 'error')
 
