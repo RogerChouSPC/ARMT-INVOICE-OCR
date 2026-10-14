@@ -190,3 +190,43 @@ Watch the escaping when editing these notes. `notes` is a TypeScript template li
 - [ ] Verify LT address disambiguation is correctly setting customergroup 05 after the OCR fix (was showing 1 row before `ee7f95b` fix — needs re-test)
 - [ ] Confirm CFR `tax_3` and `netamount` are correct after `skipVatCalc` fix
 - [ ] Consider whether other customers that print explicit VAT/tax values also need `skipVatCalc` treatment
+
+---
+
+## 2026-10-14 — Large-PDF background jobs: deployment and acceptance
+
+### Completed
+
+- Added persistent Docker job storage at `/app/job-data` through the
+  `armt-job-data` named volume, with one-job concurrency, ten-page render
+  batches, and 24-hour terminal-job retention defaults.
+- Included `src/config/customers.ts` in the runtime image so background
+  post-OCR customer detection uses the shared configuration.
+- Added a mocked 300-page worker acceptance case covering asynchronous
+  enqueue, 30 bounded render ranges, 300 durable page checkpoints, one
+  extraction call, 300 result rows, and final `done` state.
+- Updated the IT technical reference for create/poll endpoints, the more-than-
+  25-page threshold, persistence, restart recovery, and threshold rollback.
+
+### Checks actually run
+
+- Mutation RED: `npx tsx --test tests/jobWorker.test.ts` with a deliberate
+  11-page range regression — 11 passed, 2 failed; the 300-page case observed
+  28 ranges instead of 30.
+- Focused GREEN: `npx tsx --test tests/jobWorker.test.ts` — 13/13 passed.
+- Full suite: `npm test` — 82/82 passed.
+- Strict type-check: `npx tsc -p tsconfig.json --noEmit --pretty false` —
+  passed with no diagnostics.
+- Production build: `npm run build` — passed; Vite transformed 2,435 modules.
+  The existing non-fatal CSS syntax and large-chunk warnings remain.
+- Static deployment-source assertions — 14/14 passed for the Dockerfile,
+  Compose job settings/volume, and environment template.
+
+### Not run
+
+- `docker compose config` and `docker build` — not run because the Docker
+  CLI is not installed on this machine; no Docker validation is claimed.
+- Paid/authenticated live test of the existing 292-page CFR PDF — not run
+  because `OPENROUTER_API_KEY`, `VITE_AZURE_CLIENT_ID`, and
+  `VITE_AZURE_TENANT_ID` are absent. The source file exists, but mocked
+  acceptance is not presented as real-file success.

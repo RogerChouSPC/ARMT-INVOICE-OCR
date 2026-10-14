@@ -23,7 +23,8 @@ RUN npm run build
 # ---- Stage 2: runtime ----
 FROM node:20-alpine AS runtime
 WORKDIR /app
-ENV NODE_ENV=production
+ENV NODE_ENV=production \
+  JOB_DATA_DIR=/app/job-data
 
 # poppler-utils provides `pdftotext`, used by the Makro Payment Advice parser
 # (api/paymentAdvice.ts shells out to `pdftotext -layout`).
@@ -37,6 +38,8 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=builder /app/dist ./dist
 COPY api ./api
 COPY server ./server
+COPY src/config/customers.ts ./src/config/customers.ts
+RUN mkdir -p /app/job-data
 
 EXPOSE 3000
 

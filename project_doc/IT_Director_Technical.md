@@ -25,6 +25,7 @@ Audience: IT Director / System Administrator / Lead Developer
               │  Express server (Node.js)  │
               │  /api/ocr      route       │
               │  /api/extract  route       │
+              │  /api/jobs     routes      │
               └──────────┬──────────────────┘
                          │ HTTPS
           ┌──────────────▼──────────────────────────┐
@@ -57,19 +58,30 @@ Browser ──► Microsoft Azure AD (login.microsoftonline.com)
 | Excel export  | SheetJS (xlsx)      | 0.18.5  | Generate .xlsx in browser           |
 | Auth client   | @azure/msal-browser | 5.10.1  | Microsoft SSO                       |
 
-All processing (PDF reading, OCR rendering, Excel generation) happens **in the user's browser** — no file is uploaded to or stored on any server.
+The browser still inspects PDFs, detects customers, shows progress, and generates
+Excel output. PDFs with 25 pages or fewer keep the synchronous browser-led flow.
+PDFs with more than 25 pages are submitted to the server as persistent background
+jobs; their input, OCR checkpoints, and result are stored temporarily in the
+Docker job-data volume.
 
 ### 2.2 Backend (Express Server)
 
-A single Express (Node.js 20) server handles both API routes and serves the
-built frontend. It runs inside a Docker container. Entry point: `server/index.ts`.
+A single Express (Node.js 20) server handles the API routes, background worker,
+and built frontend. It runs inside a Docker container. Entry point:
+`server/index.ts`.
 
-| Route               | File             | Purpose                                                          |
-| ------------------- | ---------------- | ---------------------------------------------------------------- |
-| `POST /api/ocr`     | `api/ocr.ts`     | Send image to Gemini Vision, return extracted text               |
-| `POST /api/extract` | `api/extract.ts` | Send invoice text + customer instructions to Gemini, return JSON |
+| Route                       | File             | Purpose                                                          |
+| --------------------------- | ---------------- | ---------------------------------------------------------------- |
+| `POST /api/ocr`             | `api/ocr.ts`     | Send image to Gemini Vision, return extracted text               |
+| `POST /api/extract`         | `api/extract.ts` | Send invoice text + customer instructions to Gemini, return JSON |
+| `POST /api/jobs`            | `api/jobs.ts`    | Persist and enqueue a large PDF; return `202` plus job ID        |
+| `GET /api/jobs/:jobId`      | `api/jobs.ts`    | Poll owner-scoped progress and retrieve terminal rows            |
 
-Both routes are **stateless** — no database, no file storage. Each request is self-contained. `api/extract.ts` does not import from `src/`; the frontend detects the customer and sends the extraction instructions in the request body.
+The compatibility OCR/extract routes remain request-scoped. Background-job
+routes are stateful: each job is persisted beneath `JOB_DATA_DIR` so work can
+continue after the browser disconnects and resume after a container restart.
+The frontend and server worker both use `src/config/customers.ts` as the shared
+customer-detection source of truth.
 
 ### 2.3 Infrastructure & Hosting
 
@@ -77,6 +89,7 @@ Both routes are **stateless** — no database, no file storage. Each request is 
 | --------------- | ----------------------------------- | -------------------------------------------------- |
 | Hosting         | Company server                      | Runs the Docker container; managed by company IT   |
 | Runtime         | Docker                              | Node.js 20 container built from `app/Dockerfile`   |
+| Job storage     | Docker named volume                 | `armt-job-data` mounted at `/app/job-data`         |
 | TLS / HTTPS     | Company server                      | Certificate + reverse proxy provided by IT         |
 | Container image | GitHub Container Registry (ghcr.io) | Image built and stored by GitHub Actions           |
 | Source control  | GitHub                              | Repository: RogerChouSPC/ARMT-INVOICE-OCR          |
@@ -112,7 +125,7 @@ read (OCR vs direct text) and what extraction instructions are sent to the AI.
 4. If no customer matches → generic rules are used as fallback
 ```
 
-### 3.1 Digital PDF (text-based invoice)
+### 3.1 Small digital PDF (text-based, 25 pages or fewer)
 
 ```
 1. User uploads PDF
@@ -125,7 +138,7 @@ read (OCR vs direct text) and what extraction instructions are sent to the AI.
 7. App displays rows; user clicks Download → SheetJS generates .xlsx client-side
 ```
 
-### 3.2 Scanned PDF (image-based invoice)
+### 3.2 Small scanned PDF (image-based, 25 pages or fewer)
 
 ```
 1. User uploads PDF
@@ -158,6 +171,21 @@ read (OCR vs direct text) and what extraction instructions are sent to the AI.
 - Ensures line-item pages are not missed
 ```
 
+### 3.5 Large PDF background job (more than 25 pages)
+
+```
+1. The browser counts pages and performs initial customer detection
+2. POST /api/jobs sends the extraction inputs (and PDF base64 when OCR is
+   required); the server persists the job and returns HTTP 202 immediately
+3. One job runs at a time by default (JOB_CONCURRENCY=1)
+4. OCR jobs render at most 10 pages per range (OCR_RENDER_BATCH_PAGES=10);
+   every successful page is checkpointed beneath /app/job-data
+5. The browser polls GET /api/jobs/:jobId for page/batch progress and rows
+6. Refresh restores polling from local storage; it does not cancel server work
+7. On container restart, non-terminal jobs are re-enqueued and completed OCR
+   pages are skipped; completed/error job files expire after 24 hours
+```
+
 ---
 
 ## 4. Authentication & Security
@@ -167,8 +195,10 @@ read (OCR vs direct text) and what extraction instructions are sent to the AI.
 - Protocol: **OAuth 2.0 / OpenID Connect** via Microsoft Entra ID (Azure AD)
 - Library: MSAL.js (popup / redirect-bridge flow)
 - Token stored in: `localStorage` (scoped to domain)
-- Token validated on: **every API call** — both `/api/ocr` and `/api/extract`
-  call Microsoft Graph (`/v1.0/me`) to verify the bearer token before processing
+- Token validated on: **every API call** — `/api/ocr`, `/api/extract`, and
+  `/api/jobs` endpoints verify the bearer token before processing
+- Background jobs are bound to the verified token subject; another user receives
+  `404` rather than learning whether a job exists
 
 ### Security Posture
 
@@ -176,21 +206,27 @@ read (OCR vs direct text) and what extraction instructions are sent to the AI.
 | ---------------- | ------------------------------------------------------------ |
 | Transport        | HTTPS terminated by the company server (TLS)                 |
 | API keys         | Stored as server environment variables, never in source code |
-| Data persistence | None — invoices are never written to disk or database        |
+| Data persistence | Large-job inputs/checkpoints/results live in a named volume for 24 hours |
 | Access control   | Any valid Microsoft account in the tenant can log in         |
 | Input validation | Invoice text truncated to 40,000 chars before sending to AI  |
 
 ### Environment Variables Required
 
-| Variable               | Where Set                   | Purpose                          |
-| ---------------------- | --------------------------- | -------------------------------- |
-| `OPENROUTER_API_KEY`   | Server `.env` (secret)      | AI API access                    |
-| `VITE_AZURE_CLIENT_ID` | Build arg / `.env` (public) | Azure app registration client ID |
-| `VITE_AZURE_TENANT_ID` | Build arg / `.env` (public) | Azure AD tenant ID               |
+| Variable                    | Where Set                   | Purpose                                      |
+| --------------------------- | --------------------------- | -------------------------------------------- |
+| `OPENROUTER_API_KEY`        | Server `.env` (secret)      | AI API access                                |
+| `VITE_AZURE_CLIENT_ID`      | Build arg / `.env` (public) | Azure app registration client ID             |
+| `VITE_AZURE_TENANT_ID`      | Build arg / `.env` (public) | Azure AD tenant ID                           |
+| `JOB_DATA_DIR`              | Server `.env`                | Persistent job root (`/app/job-data`)         |
+| `JOB_CONCURRENCY`           | Server `.env`                | Concurrent large jobs (default `1`)           |
+| `OCR_RENDER_BATCH_PAGES`    | Server `.env`                | Pages rendered per range (default/max `10`)   |
+| `JOB_RETENTION_HOURS`       | Server `.env`                | Terminal-job retention (default `24` hours)   |
 
 `VITE_AZURE_*` values are baked into the browser bundle at build time and are not
 secret. `OPENROUTER_API_KEY` is read by the server at runtime and must be kept
-out of the source code and the Docker image.
+out of the source code and the Docker image. Keep `JOB_CONCURRENCY=1` unless
+the host has sufficient RAM and OpenRouter quota; increasing it raises memory
+use and rate-limit risk.
 
 ---
 
@@ -213,8 +249,9 @@ The extraction prompt is **assembled per customer**, not a single fixed prompt:
   config entry — where `vendor_customercode` is found, how `vendor_branch` is
   handled, and any free-text notes (e.g. Boots VAT marker column, CFR remark
   range, CJ verbatim description rule)
-- The frontend detects the customer and sends the built instructions in the
-  `/api/extract` request body, so the API needs no config import
+- The frontend sends the initial match and built instructions. After OCR, the
+  background worker re-runs detection using the same `src/config/customers.ts`
+  file copied into the runtime image
 
 ### Deterministic Post-Processing
 
@@ -244,8 +281,10 @@ Hosting runs on a company-owned server, so there is no per-request hosting fee.
 The cost is the server itself (a VM or physical host) plus IT maintenance time.
 A small Linux VM (around 2 vCPU / 2 GB RAM) is sufficient for this workload.
 
-Unlike the previous Vercel setup, there is **no function timeout** — large
-multi-page documents that used to time out now complete normally.
+Unlike the previous Vercel setup, large PDFs use short create/poll requests
+instead of holding one HTTP request open through OCR and extraction. Model or
+host failures can still make a job terminal, but reverse-proxy request timeouts
+no longer define the maximum processing duration.
 
 ### OpenRouter / Gemini 2.5 Flash
 
@@ -297,7 +336,7 @@ Pricing is per token (1 token ≈ 0.75 words in English, less for Thai).
 | --------------------------------------- | --------------------------------------------------------- |
 | Multiple users uploading simultaneously | Supported — limited by the server's CPU / memory          |
 | Bulk upload (10–20 files at once)       | Supported — files processed sequentially per user         |
-| Multi-page file                         | Pages OCR'd in parallel — fast regardless of page count   |
+| Multi-page file                         | >25 pages use persistent background jobs and bounded ranges |
 | 500 invoices/month                      | Comfortably within free/pro tier                          |
 | 5,000 invoices/month                    | Supported — AI cost increases linearly (~$20–40 AI cost)  |
 
@@ -306,9 +345,9 @@ Pricing is per token (1 token ≈ 0.75 words in English, less for Thai).
 | Bottleneck                       | Threshold                            | Mitigation                                              |
 | -------------------------------- | ------------------------------------ | ------------------------------------------------------- |
 | Server CPU / memory              | Sustained heavy concurrent load      | Increase the VM size, or run multiple containers behind a load balancer |
-| OpenRouter rate limits           | ~60 requests/min                     | Parallel OCR fires N calls per file; add retry/backoff for very high volume |
+| OpenRouter rate limits           | ~60 requests/min                     | Keep job concurrency at 1; bounded OCR already retries transient failures |
 | Extract text truncation          | 40,000 chars (very large documents)  | Chunk text by page and merge multiple extract calls     |
-| No persistent storage            | Data lost on browser close           | Add database layer (see Section 9)                      |
+| Job-volume capacity              | Temporary PDF/checkpoint growth      | Monitor `armt-job-data`; terminal jobs expire after 24 hours |
 
 ### Horizontal Scaling
 
@@ -335,8 +374,12 @@ Connects to the company server over SSH
 Server runs: docker compose pull && docker compose up -d
 ```
 
-- **Rollback** — re-deploy a previous image tag (each build is tagged with its commit SHA)
-- **Restart safety** — `restart: unless-stopped` brings the app back after a server reboot
+- **Rollback** — raise the client large-job threshold above supported file sizes
+  to stop routing new PDFs into background jobs; the existing synchronous routes
+  remain available. A previous image tag can also be re-deployed.
+- **Restart safety** — `restart: unless-stopped` brings the app back after a
+  server reboot, and startup recovery re-enqueues non-terminal jobs from the
+  `armt-job-data` volume
 - **Required GitHub secrets** — listed at the top of `.github/workflows/deploy.yml`
   (Azure IDs, server SSH host/user/key, deploy path, registry pull token)
 
@@ -344,10 +387,12 @@ Server runs: docker compose pull && docker compose up -d
 
 ## 9. Current Limitations & Recommended Improvements
 
-### Limitation 1 — No Data Persistence
+### Limitation 1 — No Long-Term Archive
 
-**Issue:** Extracted data exists only in the browser session. Closing the tab loses all data.
-**Recommendation:** Add a database (e.g. PostgreSQL, run as another Docker container) to store extraction history with timestamps, user, and file name.
+**Issue:** Active large jobs survive refresh/restart, but their temporary server
+data expires after 24 hours and completed table data is not an audit archive.
+**Recommendation:** Add a database (e.g. PostgreSQL, run as another Docker
+container) to store extraction history with timestamps, user, and file name.
 **Effort:** Medium (2–3 days)
 
 ### Limitation 2 — No Audit Trail
@@ -399,7 +444,10 @@ roger_spc_ocr_collab/
 └── app/                              ← All application source code
     ├── api/
     │   ├── ocr.ts                    ← API route: image OCR via Gemini Vision
-    │   └── extract.ts                ← API route: structured extraction (self-contained)
+    │   ├── extract.ts                ← API route: structured extraction
+    │   ├── jobs.ts                   ← Persistent background-job API
+    │   ├── jobStore.ts               ← Job files, checkpoints, cleanup
+    │   └── jobWorker.ts              ← Queue, recovery, bounded OCR orchestration
     ├── server/
     │   └── index.ts                  ← Express server: API routes + serves the website
     ├── src/
@@ -439,4 +487,4 @@ roger_spc_ocr_collab/
 
 ---
 
-*Last updated: May 2026 — migrated from Vercel to Docker / company-server hosting.*
+*Last updated: 14 October 2026 — persistent background jobs for PDFs over 25 pages.*

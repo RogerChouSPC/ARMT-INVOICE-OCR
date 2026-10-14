@@ -106,6 +106,55 @@ test('processes 23 pages in ranges no larger than ten and persists final rows', 
   assert.equal((await store.readResult(job.id))?.rows.length, 1)
 })
 
+test('accepts a 300-page job asynchronously with bounded rendering and durable checkpoints', async (t) => {
+  const seenRanges: Array<[number, number]> = []
+  let extractCalls = 0
+  const { store, worker, job } = await fixture(t, {
+    pageCount: 300,
+    render: async (_path, start, end) => {
+      seenRanges.push([start, end])
+      return Array.from({ length: end - start + 1 }, (_, i) => ({
+        page: start + i,
+        pngBase64: `png-${start + i}`,
+      }))
+    },
+    ocr: async (_image, page) => {
+      await new Promise<void>((resolve) => setTimeout(resolve, 1))
+      return `text-${page}`
+    },
+    extract: async (input, onProgress) => {
+      extractCalls++
+      onProgress(1, 1)
+      const pages = input.text.split('\n\n--- PAGE BREAK ---\n\n')
+      return {
+        ok: true,
+        rows: pages.map((text, index) => ({
+          invoiceno: `INV-${index + 1}`,
+          description: text,
+        })),
+      }
+    },
+  })
+
+  worker.enqueue(job.id)
+  let becameIdle = false
+  const idle = worker.waitForIdle().then(() => { becameIdle = true })
+  await Promise.resolve()
+
+  assert.equal(becameIdle, false, 'job creation must return before background work becomes idle')
+  await idle
+
+  const widths = seenRanges.map(([start, end]) => end - start + 1)
+  const checkpoints = await store.listCompletedOcrPages(job.id)
+  const result = await store.readResult(job.id)
+  assert.equal(seenRanges.length, 30)
+  assert.equal(Math.max(...widths), 10)
+  assert.deepEqual(checkpoints, Array.from({ length: 300 }, (_, index) => index + 1))
+  assert.equal(extractCalls, 1)
+  assert.equal(result?.rows.length, 300)
+  assert.equal((await store.readMetadata(job.id))?.stage, 'done')
+})
+
 test('recovery skips durable OCR pages after restart', async (t) => {
   const called: number[] = []
   const { store, worker, job } = await fixture(t, {
