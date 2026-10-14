@@ -122,6 +122,25 @@ test('recovery skips durable OCR pages after restart', async (t) => {
   assert.deepEqual(called, [3, 4, 5])
 })
 
+test('recovery reconciles pagesDone from durable OCR files when no pages are missing', async (t) => {
+  const called: number[] = []
+  const { store, worker, job } = await fixture(t, {
+    pageCount: 3,
+    onOcr: page => called.push(page),
+  })
+  await store.writeOcrPage(job.id, 1, 'page one')
+  await store.writeOcrPage(job.id, 2, 'page two')
+  await store.writeOcrPage(job.id, 3, 'page three')
+  await store.updateMetadata(job.id, { stage: 'ocr', pagesDone: 1 })
+
+  await worker.recover()
+  await worker.waitForIdle()
+
+  assert.deepEqual(called, [])
+  assert.equal((await store.readMetadata(job.id))?.pagesDone, 3)
+  assert.equal((await store.readMetadata(job.id))?.stage, 'done')
+})
+
 test('retries only a transient OCR page and checkpoints it once', async (t) => {
   let attempts = 0
   const { store, worker, job, sleepCalls } = await fixture(t, {
@@ -208,6 +227,91 @@ test('retries transient extraction from zero batch progress without repeating OC
   assert.deepEqual(ocrCalls, [1, 2])
   assert.deepEqual(setup.sleepCalls, [2000])
   assert.equal((await setup.store.readMetadata(setup.job.id))?.stage, 'done')
+})
+
+test('does not retry a deterministic status-less extraction error', async (t) => {
+  let attempts = 0
+  const { store, worker, job, sleepCalls } = await fixture(t, {
+    pageCount: 1,
+    request: { text: 'digital', isDigital: true, useOcr: false },
+    extract: async () => {
+      attempts++
+      throw new TypeError('deterministic post-processing failure')
+    },
+  })
+
+  worker.enqueue(job.id)
+  await worker.waitForIdle()
+
+  assert.equal(attempts, 1)
+  assert.deepEqual(sleepCalls, [])
+  assert.equal((await store.readMetadata(job.id))?.stage, 'error')
+})
+
+test('retries a status-less extraction failure with concrete network evidence', async (t) => {
+  let attempts = 0
+  const { store, worker, job, sleepCalls } = await fixture(t, {
+    pageCount: 1,
+    request: { text: 'digital', isDigital: true, useOcr: false },
+    extract: async () => {
+      attempts++
+      if (attempts === 1) {
+        throw Object.assign(new Error('socket reset'), { code: 'ECONNRESET' })
+      }
+      return { ok: true, rows: [{ invoiceno: 'network-retry' }] }
+    },
+  })
+
+  worker.enqueue(job.id)
+  await worker.waitForIdle()
+
+  assert.equal(attempts, 2)
+  assert.deepEqual(sleepCalls, [2000])
+  assert.equal((await store.readMetadata(job.id))?.stage, 'done')
+})
+
+test('contains rejected extraction progress writes and continues draining the queue', async (t) => {
+  const unhandled: unknown[] = []
+  const onUnhandled = (reason: unknown) => { unhandled.push(reason) }
+  process.on('unhandledRejection', onUnhandled)
+  t.after(() => process.off('unhandledRejection', onUnhandled))
+
+  const setup = await fixture(t, {
+    pageCount: 1,
+    request: { filename: 'first.pdf', text: 'first', isDigital: true, useOcr: false },
+    extract: async (input, onProgress) => {
+      onProgress(1, 1)
+      if (input.filename === 'first.pdf') {
+        await new Promise<void>((resolve) => setImmediate(resolve))
+      }
+      return { ok: true, rows: [{ filename: input.filename }] }
+    },
+  })
+  const second = await setup.store.create('owner-1', {
+    ...baseRequest,
+    filename: 'second.pdf', pageCount: 1, text: 'second', isDigital: true, useOcr: false,
+  }, Buffer.alloc(0))
+  const originalUpdateMetadata = setup.store.updateMetadata.bind(setup.store)
+  let rejectProgressOnce = true
+  setup.store.updateMetadata = async (id, update) => {
+    if (rejectProgressOnce
+      && id === setup.job.id
+      && update.stage === 'extracting'
+      && update.extractBatchesDone === 1) {
+      rejectProgressOnce = false
+      throw new Error('metadata write failed')
+    }
+    return originalUpdateMetadata(id, update)
+  }
+
+  setup.worker.enqueue(setup.job.id)
+  setup.worker.enqueue(second.id)
+  await setup.worker.waitForIdle()
+  await new Promise<void>((resolve) => setImmediate(resolve))
+
+  assert.deepEqual(unhandled, [])
+  assert.equal((await setup.store.readMetadata(setup.job.id))?.stage, 'error')
+  assert.equal((await setup.store.readMetadata(second.id))?.stage, 'done')
 })
 
 test('joins OCR checkpoints in page order even when OCR completes out of order', async (t) => {

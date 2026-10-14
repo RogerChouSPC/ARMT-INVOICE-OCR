@@ -10,6 +10,21 @@ import { buildCustomerInstructions, detectCustomer } from '../src/config/custome
 
 const PAGE_BREAK = '\n\n--- PAGE BREAK ---\n\n'
 const MAX_RENDER_BATCH_PAGES = 10
+const TRANSIENT_NETWORK_CODES = new Set([
+  'EAI_AGAIN',
+  'ECONNABORTED',
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'EHOSTUNREACH',
+  'ENETDOWN',
+  'ENETUNREACH',
+  'EPIPE',
+  'ERR_NETWORK',
+  'ETIMEDOUT',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_HEADERS_TIMEOUT',
+  'UND_ERR_SOCKET',
+])
 
 export interface JobWorkerConfig {
   jobConcurrency: number
@@ -153,7 +168,11 @@ export function createJobWorker(deps: JobWorkerDeps, config: JobWorkerConfig): J
       await deps.store.updateMetadata(id, { pagesTotal: totalPages })
     }
 
-    const completed = new Set(await deps.store.listCompletedOcrPages(id))
+    const completed = new Set(
+      (await deps.store.listCompletedOcrPages(id))
+        .filter((page) => page >= 1 && page <= totalPages),
+    )
+    await deps.store.updateMetadata(id, { pagesDone: completed.size })
     const apiKey = deps.getApiKey()
     const checkpoint = createCheckpointWriter(id)
 
@@ -235,13 +254,15 @@ export function createJobWorker(deps: JobWorkerDeps, config: JobWorkerConfig): J
     for (let attempt = 0; ; attempt++) {
       let progressWrites = Promise.resolve()
       const onProgress = (done: number, total: number) => {
-        progressWrites = progressWrites.then(async () => {
+        const write = progressWrites.then(async () => {
           await deps.store.updateMetadata(id, {
             stage: 'extracting',
             extractBatchesDone: done,
             extractBatchesTotal: total,
           })
         })
+        void write.catch(() => {})
+        progressWrites = write
       }
 
       let result: ExtractCoreResult
@@ -345,9 +366,22 @@ async function retryTransient<T>(
 }
 
 function isTransient(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null || !('status' in error)) return true
+  if (typeof error !== 'object' || error === null) return false
   const status = Number((error as { status?: unknown }).status)
-  return status === 429 || (status >= 500 && status <= 599)
+  if (Number.isFinite(status)) {
+    return status === 429 || (status >= 500 && status <= 599)
+  }
+  return hasTransientNetworkCode(error)
+}
+
+function hasTransientNetworkCode(error: object): boolean {
+  let current: unknown = error
+  for (let depth = 0; depth < 4 && typeof current === 'object' && current !== null; depth++) {
+    const value = current as { code?: unknown; cause?: unknown }
+    if (typeof value.code === 'string' && TRANSIENT_NETWORK_CODES.has(value.code)) return true
+    current = value.cause
+  }
+  return false
 }
 
 function safeErrorMessage(error: unknown): string {
