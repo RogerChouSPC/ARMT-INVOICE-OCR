@@ -34,3 +34,6 @@ OUTPUT JAN-APR/
 app/scripts/eval/vendor-map.json
 app/scripts/eval/.cache/
 app/scripts/eval/reports/
+
+# Isolated agent worktrees
+.worktrees/
