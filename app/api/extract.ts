@@ -17,7 +17,7 @@ vendor_customercode: a code in [brackets]/(parentheses) near the company name or
 vendor_branch: only an explicitly labelled branch ("สาขาที่", "Branch", "Site code"); "Group [number]" is NOT a branch; return "" if none found.`
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
-const MODEL = 'google/gemini-2.5-flash'
+import { MODEL } from './model'
 const OUR_TAXID = '0107537001421'
 
 function buildSystemPrompt(customerMasterJson: string, customerSection: string): string {

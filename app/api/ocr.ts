@@ -7,7 +7,7 @@ import {
 import { verifyAzureToken } from './verifyToken'
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
-const MODEL = 'google/gemini-2.5-flash'
+import { MODEL } from './model'
 
 export type OcrCoreResult =
   | { ok: true; text: string }

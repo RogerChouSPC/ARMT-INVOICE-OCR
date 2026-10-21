@@ -14,6 +14,7 @@ import {
   buildExtractMessages, callExtractModel, parseJsonFromText, postProcessRows, buildCustomerMasterJson,
 } from '../../api/extract.ts'
 import { ocrImageCore } from '../../api/ocr.ts'
+import { MODEL } from '../../api/model.ts'
 import { CUSTOMER_MASTER_SEED } from '../../src/config/customerMasterSeed.ts'
 
 export interface PipelineResult {
@@ -56,12 +57,12 @@ export async function runPdf(pdfPath: string, apiKey: string): Promise<PipelineR
       text = t.text
     } else {
       // Stage 2: combined OCR text (cached per-pdf; pages cached per-image)
-      let ocr = getCache<string>('ocrtext', key)
+      let ocr = getCache<string>('ocrtext', sha(MODEL + key))
       if (ocr == null) {
         const pages = renderPdfPages(pdfPath)
         const texts: string[] = []
         for (const page of pages) {
-          const ik = sha(page.base64)
+          const ik = sha(MODEL + page.base64)
           let pt = getCache<string>('ocr', ik)
           if (pt == null) {
             const r = await ocrImageCore(page.base64, apiKey)
@@ -73,7 +74,7 @@ export async function runPdf(pdfPath: string, apiKey: string): Promise<PipelineR
           texts.push(pt)
         }
         ocr = texts.join(PAGE_BREAK)
-        setCache('ocrtext', key, ocr)
+        setCache('ocrtext', sha(MODEL + key), ocr)
       }
       text = ocr
       effRule = rule ?? detectCustomer(ocr, filename)
@@ -83,7 +84,7 @@ export async function runPdf(pdfPath: string, apiKey: string): Promise<PipelineR
     // Stage 3: extraction LLM (raw output cached by prompt hash) + post-processing (free)
     const customerSection = buildCustomerInstructions(effRule)
     const messages = buildExtractMessages({ text, filename, customerSection, customerMasterJson })
-    const rawKey = sha('gemini-2.5-flash\n' + JSON.stringify(messages))
+    const rawKey = sha(MODEL + '\n' + JSON.stringify(messages))
     let raw = getCache<string>('rawllm', rawKey)
     if (raw == null) {
       const r = await callExtractModel(messages, apiKey)
